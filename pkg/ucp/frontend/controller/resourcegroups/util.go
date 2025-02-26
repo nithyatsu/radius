@@ -23,10 +23,10 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/radius-project/radius/pkg/components/database"
 	"github.com/radius-project/radius/pkg/ucp/datamodel"
 	"github.com/radius-project/radius/pkg/ucp/resources"
 	resources_radius "github.com/radius-project/radius/pkg/ucp/resources/radius"
-	"github.com/radius-project/radius/pkg/ucp/store"
 )
 
 // NotFoundError is returned when a resource group or plane is not found.
@@ -62,15 +62,15 @@ func (e *InvalidError) Is(err error) bool {
 }
 
 // ValidateRadiusPlane validates that the plane specified in the id exists. Returns NotFoundError if the plane does not exist.
-func ValidateRadiusPlane(ctx context.Context, client store.StorageClient, id resources.ID) (*datamodel.RadiusPlane, error) {
+func ValidateRadiusPlane(ctx context.Context, client database.Client, id resources.ID) (*datamodel.RadiusPlane, error) {
 	planeID, err := resources.ParseScope(id.PlaneScope())
 	if err != nil {
 		// Not expected to happen.
 		return nil, err
 	}
 
-	plane, err := store.GetResource[datamodel.RadiusPlane](ctx, client, planeID.String())
-	if errors.Is(err, &store.ErrNotFound{}) {
+	plane, err := database.GetResource[datamodel.RadiusPlane](ctx, client, planeID.String())
+	if errors.Is(err, &database.ErrNotFound{}) {
 		return nil, &NotFoundError{Message: fmt.Sprintf("plane %q not found", planeID.String())}
 	} else if err != nil {
 		return nil, fmt.Errorf("failed to fetch plane %q: %w", planeID.String(), err)
@@ -81,7 +81,7 @@ func ValidateRadiusPlane(ctx context.Context, client store.StorageClient, id res
 
 // ValidateResourceGroup validates that the resource group specified in the id exists (if applicable).
 // Returns NotFoundError if the resource group does not exist.
-func ValidateResourceGroup(ctx context.Context, client store.StorageClient, id resources.ID) error {
+func ValidateResourceGroup(ctx context.Context, client database.Client, id resources.ID) error {
 	// If the ID contains a resource group, validate it now.
 	if id.FindScope(resources_radius.ScopeResourceGroups) == "" {
 		return nil
@@ -93,8 +93,8 @@ func ValidateResourceGroup(ctx context.Context, client store.StorageClient, id r
 		return err
 	}
 
-	_, err = store.GetResource[datamodel.ResourceGroup](ctx, client, resourceGroupID.String())
-	if errors.Is(err, &store.ErrNotFound{}) {
+	_, err = database.GetResource[datamodel.ResourceGroup](ctx, client, resourceGroupID.String())
+	if errors.Is(err, &database.ErrNotFound{}) {
 		return &NotFoundError{Message: fmt.Sprintf("resource group %q not found", resourceGroupID.String())}
 	} else if err != nil {
 		return fmt.Errorf("failed to fetch resource group %q: %w", resourceGroupID.String(), err)
@@ -108,7 +108,7 @@ func ValidateResourceGroup(ctx context.Context, client store.StorageClient, id r
 //
 // Returns NotFoundError if the resource type does not exist.
 // Returns InvalidError if the request cannot be routed due to an invalid configuration.
-func ValidateResourceType(ctx context.Context, client store.StorageClient, id resources.ID, locationName string, apiVersion string) (*url.URL, error) {
+func ValidateResourceType(ctx context.Context, client database.Client, id resources.ID, locationName string, apiVersion string) (*url.URL, error) {
 	// The strategy is to:
 	// - Look up the resource type and validate that it exists .. then
 	// - Look up the location resource, and validate that it supports the requested resource type and API version.
@@ -121,14 +121,9 @@ func ValidateResourceType(ctx context.Context, client store.StorageClient, id re
 			return nil, err
 		}
 
-		_, err = store.GetResource[datamodel.ResourceType](ctx, client, resourceTypeID.String())
-		if errors.Is(err, &store.ErrNotFound{}) {
-
-			// Return the error as-is to fallback to the legacy routing behavior.
-			return nil, err
-
-			// Uncomment this when we remove the legacy routing behavior.
-			// return nil, &InvalidError{Message: fmt.Sprintf("resource type %q not found", id.Type())}
+		_, err = database.GetResource[datamodel.ResourceType](ctx, client, resourceTypeID.String())
+		if errors.Is(err, &database.ErrNotFound{}) {
+			return nil, &InvalidError{Message: fmt.Sprintf("resource type %q not found", id.Type())}
 		} else if err != nil {
 			return nil, fmt.Errorf("failed to fetch resource type %q: %w", id.Type(), err)
 		}
@@ -139,14 +134,9 @@ func ValidateResourceType(ctx context.Context, client store.StorageClient, id re
 		return nil, err
 	}
 
-	location, err := store.GetResource[datamodel.Location](ctx, client, locationID.String())
-	if errors.Is(err, &store.ErrNotFound{}) {
-
-		// Return the error as-is to fallback to the legacy routing behavior.
-		return nil, err
-
-		// Uncomment this when we remove the legacy routing behavior.
-		// return nil, &InvalidError{Message: fmt.Sprintf("location %q not found for resource provider %q", locationName, id.ProviderNamespace())}
+	location, err := database.GetResource[datamodel.Location](ctx, client, locationID.String())
+	if errors.Is(err, &database.ErrNotFound{}) {
+		return nil, &InvalidError{Message: fmt.Sprintf("location %q not found for resource provider %q", locationName, id.ProviderNamespace())}
 	} else if err != nil {
 		return nil, fmt.Errorf("failed to fetch location %q: %w", locationID.String(), err)
 	}
@@ -155,7 +145,10 @@ func ValidateResourceType(ctx context.Context, client store.StorageClient, id re
 	// Resource types are case-insensitive so we have to iterate.
 	var locationResourceType *datamodel.LocationResourceTypeConfiguration
 
-	// We special-case two pseudo-resource types: "locations/operationstatuses" and "locations/operationresults".
+	// We special-case two pseudo-resource types: "operationstatuses" and "operationresults".
+	//
+	// These are implemented by all resource providers, and don't require the resource provider to register them.
+	//
 	// If the resource type is one of these, we can return the downstream URL directly.
 	if isOperationResourceType(id) {
 		locationResourceType = &datamodel.LocationResourceTypeConfiguration{
@@ -215,10 +208,11 @@ func isOperationResourceType(id resources.ID) bool {
 		return true
 	}
 
-	// An older pattern is to use a child resource
+	// An older pattern is to use a child resource, it might also use the name "operations"
 	typeSegments := id.TypeSegments()
 	if len(typeSegments) >= 2 && (strings.EqualFold(typeSegments[len(typeSegments)-1].Type, "operationstatuses") ||
-		strings.EqualFold(typeSegments[len(typeSegments)-1].Type, "operationresults")) {
+		strings.EqualFold(typeSegments[len(typeSegments)-1].Type, "operationresults") ||
+		strings.EqualFold(typeSegments[len(typeSegments)-1].Type, "operations")) {
 		return true
 	}
 
@@ -226,37 +220,20 @@ func isOperationResourceType(id resources.ID) bool {
 	return false
 }
 
-// ValidateLegacyResourceProvider validates that the resource provider specified in the id exists. Returns InvalidError if the plane
-// contains invalid data.
-func ValidateLegacyResourceProvider(ctx context.Context, client store.StorageClient, id resources.ID, plane *datamodel.RadiusPlane) (*url.URL, error) {
-	downstream := plane.LookupResourceProvider(id.ProviderNamespace())
-	if downstream == "" {
-		return nil, &InvalidError{Message: fmt.Sprintf("resource provider %s not configured", id.ProviderNamespace())}
-	}
-
-	downstreamURL, err := url.Parse(downstream)
-	if err != nil {
-		return nil, &InvalidError{Message: fmt.Sprintf("failed to parse downstream URL: %v", err.Error())}
-	}
-
-	return downstreamURL, nil
-}
-
 // ValidateDownstream can be used to find and validate the downstream URL for a resource.
 // Returns NotFoundError for the case where the plane or resource group does not exist.
 // Returns InvalidError for cases where the data is invalid, like when the resource provider is not configured.
-func ValidateDownstream(ctx context.Context, client store.StorageClient, id resources.ID, location string, apiVersion string) (*url.URL, error) {
+func ValidateDownstream(ctx context.Context, client database.Client, id resources.ID, location string, apiVersion string) (*url.URL, error) {
 	// There are a few steps to validation:
 	//
 	// - The plane exists
 	// - The resource group exists
 	// - The resource provider is configured .. either:
-	// 		- As part of the plane (legacy routing)
 	// 		- As part of a resource provider resource (System.Resources/resourceProviders) (new/UDT routing)
 	//
 
 	// The plane exists.
-	plane, err := ValidateRadiusPlane(ctx, client, id)
+	_, err := ValidateRadiusPlane(ctx, client, id)
 	if err != nil {
 		return nil, err
 	}
@@ -269,10 +246,7 @@ func ValidateDownstream(ctx context.Context, client store.StorageClient, id reso
 
 	// If this returns success, it means the resource type is configured using new/UDT routing.
 	downstreamURL, err := ValidateResourceType(ctx, client, id, location, apiVersion)
-	if errors.Is(err, &store.ErrNotFound{}) {
-		// If the resource provider is not found, treat it like a legacy provider.
-		return ValidateLegacyResourceProvider(ctx, client, id, plane)
-	} else if err != nil {
+	if err != nil {
 		return nil, err
 	}
 

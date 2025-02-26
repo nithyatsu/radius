@@ -35,7 +35,9 @@ import (
 	app_list "github.com/radius-project/radius/pkg/cli/cmd/app/list"
 	app_show "github.com/radius-project/radius/pkg/cli/cmd/app/show"
 	app_status "github.com/radius-project/radius/pkg/cli/cmd/app/status"
+	bicep_generate_kubernetes_manifest "github.com/radius-project/radius/pkg/cli/cmd/bicep/generatekubernetesmanifest"
 	bicep_publish "github.com/radius-project/radius/pkg/cli/cmd/bicep/publish"
+	bicep_publishextension "github.com/radius-project/radius/pkg/cli/cmd/bicep/publishextension"
 	credential "github.com/radius-project/radius/pkg/cli/cmd/credential"
 	cmd_deploy "github.com/radius-project/radius/pkg/cli/cmd/deploy"
 	env_create "github.com/radius-project/radius/pkg/cli/cmd/env/create"
@@ -61,6 +63,7 @@ import (
 	resourceprovider_delete "github.com/radius-project/radius/pkg/cli/cmd/resourceprovider/delete"
 	resourceprovider_list "github.com/radius-project/radius/pkg/cli/cmd/resourceprovider/list"
 	resourceprovider_show "github.com/radius-project/radius/pkg/cli/cmd/resourceprovider/show"
+	resourcetype_create "github.com/radius-project/radius/pkg/cli/cmd/resourcetype/create"
 	resourcetype_delete "github.com/radius-project/radius/pkg/cli/cmd/resourcetype/delete"
 	resourcetype_list "github.com/radius-project/radius/pkg/cli/cmd/resourcetype/list"
 	resourcetype_show "github.com/radius-project/radius/pkg/cli/cmd/resourcetype/show"
@@ -82,8 +85,11 @@ import (
 	"github.com/radius-project/radius/pkg/cli/kubernetes/portforward"
 	"github.com/radius-project/radius/pkg/cli/output"
 	"github.com/radius-project/radius/pkg/cli/prompt"
-	"github.com/radius-project/radius/pkg/trace"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -144,9 +150,7 @@ func prettyPrintJSON(o any) (string, error) {
 func Execute() error {
 	ctx := context.WithValue(context.Background(), ConfigHolderKey, ConfigHolder)
 
-	shutdown, err := trace.InitTracer(trace.Options{
-		ServiceName: serviceName,
-	})
+	shutdown, err := initTracer()
 	if err != nil {
 		fmt.Println("Error:", err)
 		return err
@@ -180,6 +184,23 @@ func Execute() error {
 	}
 
 	return nil
+}
+
+func initTracer() (func(context.Context) error, error) {
+	// Intialize the tracer provider
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithSampler(sdktrace.AlwaysSample()),
+		sdktrace.WithResource(resource.NewWithAttributes(
+			semconv.SchemaURL,
+			semconv.ServiceNameKey.String(serviceName),
+		)),
+	)
+
+	// Set the tracer provider as "global" for the CLI process.
+	otel.SetTracerProvider(tp)
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}))
+
+	return tp.Shutdown, nil
 }
 
 func init() {
@@ -254,6 +275,9 @@ func initSubCommands() {
 	resourceTypeDeleteCmd, _ := resourcetype_delete.NewCommand(framework)
 	resourceTypeCmd.AddCommand(resourceTypeDeleteCmd)
 
+	resourceTypeCreateCmd, _ := resourcetype_create.NewCommand(framework)
+	resourceTypeCmd.AddCommand(resourceTypeCreateCmd)
+
 	listRecipeCmd, _ := recipe_list.NewCommand(framework)
 	recipeCmd.AddCommand(listRecipeCmd)
 
@@ -325,6 +349,12 @@ func initSubCommands() {
 
 	bicepPublishCmd, _ := bicep_publish.NewCommand(framework)
 	bicepCmd.AddCommand(bicepPublishCmd)
+
+	bicepGenerateKubernetesManifestCmd, _ := bicep_generate_kubernetes_manifest.NewCommand(framework)
+	bicepCmd.AddCommand(bicepGenerateKubernetesManifestCmd)
+
+	bicepPublishExtensionCmd, _ := bicep_publishextension.NewCommand(framework)
+	bicepCmd.AddCommand(bicepPublishExtensionCmd)
 
 	installCmd := install.NewCommand()
 	RootCmd.AddCommand(installCmd)

@@ -18,12 +18,8 @@ package show
 
 import (
 	"context"
-	"slices"
-	"strings"
 
 	"github.com/radius-project/radius/pkg/cli"
-	"github.com/radius-project/radius/pkg/cli/clients"
-	"github.com/radius-project/radius/pkg/cli/clierrors"
 	"github.com/radius-project/radius/pkg/cli/cmd/commonflags"
 	"github.com/radius-project/radius/pkg/cli/cmd/resourcetype/common"
 	"github.com/radius-project/radius/pkg/cli/connections"
@@ -92,14 +88,11 @@ func (r *Runner) Validate(cmd *cobra.Command, args []string) error {
 	}
 	r.Format = format
 
-	r.ResourceTypeName = args[0]
-	parts := strings.Split(r.ResourceTypeName, "/")
-	if len(parts) != 2 {
-		return clierrors.Message("Invalid resource type %q. Expected format: '<provider>/<type>'", r.ResourceTypeName)
+	r.ResourceProviderNamespace, r.ResourceTypeSuffix, err = cli.RequireFullyQualifiedResourceType(args)
+	if err != nil {
+		return err
 	}
-
-	r.ResourceProviderNamespace = parts[0]
-	r.ResourceTypeSuffix = parts[1]
+	r.ResourceTypeName = r.ResourceProviderNamespace + "/" + r.ResourceTypeSuffix
 
 	return nil
 }
@@ -110,27 +103,13 @@ func (r *Runner) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-
-	resourceProvider, err := client.GetResourceProviderSummary(ctx, "local", r.ResourceProviderNamespace)
-	if clients.Is404Error(err) {
-		return clierrors.Message("The resource provider %q was not found or has been deleted.", r.ResourceProviderNamespace)
-	} else if err != nil {
-		return err
-	}
-
-	resourceTypes := common.ResourceTypesForProvider(&resourceProvider)
-	idx := slices.IndexFunc(resourceTypes, func(rt common.ResourceType) bool {
-		return rt.Name == r.ResourceTypeName
-	})
-
-	if idx < 0 {
-		return clierrors.Message("Resource type %q not found in resource provider %q.", r.ResourceTypeSuffix, r.ResourceProviderNamespace)
-	}
-
-	err = r.Output.WriteFormatted(r.Format, resourceTypes[idx], common.GetResourceTypeTableFormat())
+	resourceTypeDetails, err := common.GetResourceTypeDetails(ctx, r.ResourceProviderNamespace, r.ResourceTypeSuffix, client)
 	if err != nil {
 		return err
 	}
-
+	err = r.Output.WriteFormatted(r.Format, resourceTypeDetails, common.GetResourceTypeTableFormat())
+	if err != nil {
+		return err
+	}
 	return nil
 }

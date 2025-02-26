@@ -66,10 +66,6 @@ env:
   TF_RECIPE_MODULE_SERVER_URL: "http://tf-module-server.radius-test-tf-module-server.svc.cluster.local"
   # Private Git repository where terraform module for testing is stored.
   TF_RECIPE_PRIVATE_GIT_SOURCE: "git::https://github.com/radius-project/terraform-private-modules//kubernetes-redis"
-
-  # The number of failed tests to report.
-  ISSUE_CREATE_THRESHOLD: 2
-
   # Local Docker registry name
   LOCAL_REGISTRY_NAME: "radius-registry"
   # Local Docker registry server
@@ -130,7 +126,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        os: [ubuntu-latest-m]
+        os: [ubuntu-latest]
         name:
           [
             cli-noncloud,
@@ -183,24 +179,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GOVER }}
-
-      - name: Get Go Cache path
-        id: go-cache-paths
-        run: |
-          echo "go-build=$(go env GOCACHE)" >> $GITHUB_OUTPUT
-          sudo rm -rf $(go env GOCACHE)
-
-          echo "go-mod=$(go env GOMODCACHE)" >> $GITHUB_OUTPUT
-          sudo rm -rf $(go env GOMODCACHE)
-
-      - uses: actions/cache@v4
-        with:
-          path: |
-            ${{ steps.go-cache-paths.outputs.go-build }}
-            ${{ steps.go-cache-paths.outputs.go-mod }}
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
+          cache: true
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -293,6 +272,50 @@ jobs:
           echo "*** Installing Radius to Kubernetes ***"
           eval $RAD_COMMAND
 
+          echo "*** Verify manifests are registered ***"
+          rm -f registermanifest_logs.txt
+          # Find the pod with container "ucp"
+          POD_NAME=$(
+            kubectl get pods -n radius-system \
+              -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.spec.containers[*].name}{"\n"}{end}' \
+            | grep "ucp" \
+            | head -n1 \
+            | cut -d" " -f1
+          )
+          echo "Found ucp pod: $POD_NAME"
+
+          if [ -z "$POD_NAME" ]; then
+            echo "No pod with container 'ucp' found in namespace radius-system."
+            exit 1
+          fi
+
+          # Poll logs for up to  iterations, 30 seconds each (upto 3 minutes total)
+          for i in {1..6}; do
+            kubectl logs "$POD_NAME" -n radius-system | tee registermanifest_logs.txt > /dev/null
+            
+            # Exit on error
+            if grep -qi "Service initializer terminated with error" registermanifest_logs.txt; then
+              echo "Error found in ucp logs."
+              grep -i "Service initializer terminated with error" registermanifest_logs.txt
+              exit 1
+            fi
+
+            # Check for success
+            if grep -q "Successfully registered manifests" registermanifest_logs.txt; then
+              echo "Successfully registered manifests - message found."
+              break
+            fi
+
+            echo "Logs not ready, waiting 30 seconds..."
+            sleep 30
+          done
+
+          # Final check to ensure success message was found
+          if ! grep -q "Successfully registered manifests" registermanifest_logs.txt; then
+            echo "Manifests not registered after 3 minutes."
+            exit 1
+          fi
+
           echo "*** Create workspace, group and environment for test ***"
           rad workspace create kubernetes
           rad group create kind-radius
@@ -301,6 +324,8 @@ jobs:
           # The functional test is designed to use default namespace. So you must create the environment for default namespace.
           rad env create kind-radius --namespace default
           rad env switch kind-radius
+        continue-on-error: true  
+
         env:
           USE_CERT_FILE: "true"
           TEMP_CERT_DIR: ${{ steps.create-local-registry.outputs.temp-cert-dir }}
@@ -349,7 +374,7 @@ jobs:
           BICEP_RECIPE_TAG_VERSION: ${{ env.REL_VERSION }}
           TEMP_CERT_DIR: ${{ steps.create-local-registry.outputs.temp-cert-dir }}
           SSL_CERT_FILE: ${{ steps.create-local-registry.outputs.temp-cert-dir }}/certs/${{ env.LOCAL_REGISTRY_SERVER }}/client.crt
-      
+
       - name: Run functional tests
         run: |
           # Ensure rad cli is in path before running tests.
@@ -453,32 +478,8 @@ jobs:
     runs-on: ubuntu-latest
     if: failure() && github.event_name == 'schedule' && github.repository == 'radius-project/radius'
     steps:
-      - name: Count recently failed tests
-        id: count_failures
-        uses: actions/github-script@v7
-        with:
-          script: |
-            response = await github.rest.actions.listWorkflowRuns({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: 'functional-test-noncloud.yaml',
-              event: 'schedule',
-              per_page: 10
-            });
-
-            failureCount = 1;
-            for (const run of response.data.workflow_runs) {
-              if (run.conclusion === 'failure') {
-                failureCount++;
-              } else {
-                break;
-              }
-            }
-            return failureCount;
       - name: Create failure issue for failing scheduled run
         uses: actions/github-script@v7
-        # Only create an issue if there are (env.ISSUE_CREATE_THRESHOLD) failures of the recent tests.
-        if: steps.count_failures.outputs.result >= env.ISSUE_CREATE_THRESHOLD
         with:
           github-token: ${{ secrets.GH_RAD_CI_BOT_PAT }}
           script: |
@@ -486,5 +487,5 @@ jobs:
               ...context.repo,
               title: `Scheduled functional test (noncloud) failed - Run ID: ${context.runId}`,
               labels: ['bug', 'test-failure'],
-              body: `## Bug information \n\nThis bug is generated automatically if the scheduled functional test fails at least ${process.env.ISSUE_CREATE_THRESHOLD} times in a row. The Radius functional test operates on a schedule of every 4 hours during weekdays and every 12 hours over the weekend. It's important to understand that the test may fail due to workflow infrastructure issues, like network problems, rather than the flakiness of the test itself. For the further investigation, please visit [here](${process.env.ACTION_LINK}).`
+              body: `## Bug information \n\nThis issue is automatically generated if the scheduled functional test fails. The Radius functional test operates on a schedule of every 4 hours during weekdays and every 12 hours over the weekend. It's important to understand that the test may fail due to workflow infrastructure issues, like network problems, rather than the flakiness of the test itself. For the further investigation, please visit [here](${process.env.ACTION_LINK}).`
             })

@@ -43,6 +43,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GOVER }}
+          cache: true
       - name: Setup NodeJS
         uses: actions/setup-node@v4
         with:
@@ -104,6 +105,7 @@ jobs:
           node-version: "22"
       - name: Run `make format-check`
         id: format-check
+        continue-on-error: true
         run: |
           make format-check
       - name: Check for formatting failures

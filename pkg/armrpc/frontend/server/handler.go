@@ -55,11 +55,6 @@ type ControllerFactoryFunc func(ctrl.Options) (ctrl.Controller, error)
 // multiple types of resources (e.g. PUT on any type of AWS resource):
 // - Set ResourceType for operations that are scoped to a resource type.
 // - Set OperationType for general operations.
-//
-// In the controller options passed to the controller factory:
-//
-// - When ResourceType is set, the StorageClient will be configured to use the resource type.
-// - When OperationType is set, the StorageClient will be generic and not filtered to a specific resource type.
 type HandlerOptions struct {
 	// ParentRouter is the router to register the handler with.
 	ParentRouter chi.Router
@@ -68,8 +63,6 @@ type HandlerOptions struct {
 	Path string
 
 	// ResourceType is the resource type of the operation. May be blank if Operation is specified.
-	//
-	// If specified the ResourceType will be used to filter the StorageClient.
 	ResourceType string
 
 	// Method is the method of the operation. May be blank if Operation is specified.
@@ -130,13 +123,12 @@ func HandlerForController(controller ctrl.Controller, operationType v1.Operation
 
 // CreateHandler creates an http.Handler for the given resource type and operation method.
 func CreateHandler(ctx context.Context, resourceType string, operationMethod v1.OperationMethod, opts ctrl.Options, factory ControllerFactoryFunc) (http.HandlerFunc, error) {
-	storageClient, err := opts.DataProvider.GetStorageClient(ctx, resourceType)
-	if err != nil {
-		return nil, err
-	}
-
-	opts.StorageClient = storageClient
 	opts.ResourceType = resourceType
+
+	err := opts.Validate()
+	if err != nil {
+		return nil, fmt.Errorf("invalid controller options: %w", err)
+	}
 
 	ctrl, err := factory(opts)
 	if err != nil {
@@ -155,13 +147,12 @@ func RegisterHandler(ctx context.Context, opts HandlerOptions, ctrlOpts ctrl.Opt
 		return ErrInvalidOperationTypeOption
 	}
 
-	storageClient, err := ctrlOpts.DataProvider.GetStorageClient(ctx, opts.ResourceType)
-	if err != nil {
-		return err
-	}
-
-	ctrlOpts.StorageClient = storageClient
 	ctrlOpts.ResourceType = opts.ResourceType
+
+	err := ctrlOpts.Validate()
+	if err != nil {
+		return fmt.Errorf("invalid controller options: %w", err)
+	}
 
 	ctrl, err := opts.ControllerFactory(ctrlOpts)
 	if err != nil {
@@ -286,14 +277,14 @@ func HandleError(ctx context.Context, w http.ResponseWriter, req *http.Request, 
 	switch v := err.(type) {
 	case *v1.ErrModelConversion:
 		response = rest.NewBadRequestARMResponse(v1.ErrorResponse{
-			Error: v1.ErrorDetails{
+			Error: &v1.ErrorDetails{
 				Code:    v1.CodeHTTPRequestPayloadAPISpecValidationFailed,
 				Message: err.Error(),
 			},
 		})
 	case *v1.ErrClientRP:
 		response = rest.NewBadRequestARMResponse(v1.ErrorResponse{
-			Error: v1.ErrorDetails{
+			Error: &v1.ErrorDetails{
 				Code:    v.Code,
 				Message: v.Message,
 			},
@@ -301,14 +292,14 @@ func HandleError(ctx context.Context, w http.ResponseWriter, req *http.Request, 
 	default:
 		if errors.Is(err, v1.ErrInvalidModelConversion) {
 			response = rest.NewBadRequestARMResponse(v1.ErrorResponse{
-				Error: v1.ErrorDetails{
+				Error: &v1.ErrorDetails{
 					Code:    v1.CodeHTTPRequestPayloadAPISpecValidationFailed,
 					Message: err.Error(),
 				},
 			})
 		} else {
 			response = rest.NewInternalServerErrorARMResponse(v1.ErrorResponse{
-				Error: v1.ErrorDetails{
+				Error: &v1.ErrorDetails{
 					Code:    v1.CodeInternal,
 					Message: err.Error(),
 				},
@@ -318,8 +309,8 @@ func HandleError(ctx context.Context, w http.ResponseWriter, req *http.Request, 
 
 	err = response.Apply(ctx, w, req)
 	if err != nil {
-		body := v1.ErrorResponse{
-			Error: v1.ErrorDetails{
+		body := &v1.ErrorResponse{
+			Error: &v1.ErrorDetails{
 				Code:    v1.CodeInternal,
 				Message: err.Error(),
 			},

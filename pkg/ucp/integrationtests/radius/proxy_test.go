@@ -28,9 +28,8 @@ import (
 	backend_ctrl "github.com/radius-project/radius/pkg/armrpc/asyncoperation/controller"
 	"github.com/radius-project/radius/pkg/to"
 	"github.com/radius-project/radius/pkg/ucp/api/v20231001preview"
-	"github.com/radius-project/radius/pkg/ucp/frontend/api"
 	"github.com/radius-project/radius/pkg/ucp/integrationtests/testrp"
-	"github.com/radius-project/radius/pkg/ucp/integrationtests/testserver"
+	"github.com/radius-project/radius/pkg/ucp/testhost"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -40,15 +39,18 @@ const (
 	testRadiusPlaneID        = "/planes/radius/test"
 	testResourceNamespace    = "System.Test"
 	testResourceGroupID      = testRadiusPlaneID + "/resourceGroups/test-rg"
+	testResourceProviderID   = testRadiusPlaneID + "/providers/System.Resources/resourceproviders/System.Test"
 	testResourceCollectionID = testResourceGroupID + "/providers/System.Test/testResources"
 	testResourceID           = testResourceCollectionID + "/test-resource"
+	resourceTypeURL          = testResourceProviderID + "/resourcetypes/testResources"
+	locationID               = testResourceProviderID + "/locations/global"
 
 	assertTimeout = time.Second * 10
 	assertRetry   = time.Second * 2
 )
 
 func Test_RadiusPlane_Proxy_ResourceGroupDoesNotExist(t *testing.T) {
-	ucp := testserver.StartWithETCD(t, api.DefaultModules)
+	ucp := testhost.Start(t)
 	rp := testrp.Start(t)
 
 	rps := map[string]*string{
@@ -62,16 +64,22 @@ func Test_RadiusPlane_Proxy_ResourceGroupDoesNotExist(t *testing.T) {
 }
 
 func Test_RadiusPlane_ResourceSync(t *testing.T) {
-	ucp := testserver.StartWithETCD(t, api.DefaultModules)
+	ucp := testhost.Start(t)
 	rp := testrp.Start(t)
 	rp.Handler = testrp.SyncResource(t, ucp, testResourceGroupID)
-
+	address := to.Ptr("http://" + rp.Address())
 	rps := map[string]*string{
-		testResourceNamespace: to.Ptr("http://" + rp.Address()),
+		testResourceNamespace: address,
 	}
 	createRadiusPlane(ucp, rps)
 
 	createResourceGroup(ucp, testResourceGroupID)
+
+	createResourceProvider(ucp)
+
+	createResourceType(ucp, resourceTypeURL)
+
+	createLocation(ucp, address)
 
 	message := "here is some test data"
 
@@ -90,7 +98,10 @@ func Test_RadiusPlane_ResourceSync(t *testing.T) {
 		body, err := json.Marshal(data)
 		require.NoError(t, err)
 
-		response := ucp.MakeRequest(http.MethodPut, testResourceID+"?api-version="+testrp.Version, body)
+		response := ucp.MakeRequest(http.MethodGet, resourceTypeURL+"?api-version="+testrp.Version, nil)
+		response.EqualsStatusCode(http.StatusOK)
+
+		response = ucp.MakeRequest(http.MethodPut, testResourceID+"?api-version="+testrp.Version, body)
 		response.EqualsStatusCode(http.StatusOK)
 
 		resource := &testrp.TestResource{}
@@ -158,7 +169,7 @@ func Test_RadiusPlane_ResourceSync(t *testing.T) {
 }
 
 func Test_RadiusPlane_ResourceAsync(t *testing.T) {
-	ucp := testserver.StartWithETCD(t, api.DefaultModules)
+	ucp := testhost.Start(t)
 	rp := testrp.Start(t)
 
 	// Block background work item completion until we're ready.
@@ -176,7 +187,7 @@ func Test_RadiusPlane_ResourceAsync(t *testing.T) {
 			return result, nil
 		}
 
-		client, err := ucp.Clients.StorageProvider.GetStorageClient(ctx, "System.Test/testResources")
+		client, err := ucp.Options().DatabaseProvider.GetClient(ctx)
 		require.NoError(t, err)
 		err = client.Delete(ctx, testResourceID)
 		require.NoError(t, err)
@@ -185,13 +196,20 @@ func Test_RadiusPlane_ResourceAsync(t *testing.T) {
 	}
 
 	rp.Handler = testrp.AsyncResource(t, ucp, testResourceGroupID, onPut, onDelete)
-
+	address := to.Ptr("http://" + rp.Address())
 	rps := map[string]*string{
-		testResourceNamespace: to.Ptr("http://" + rp.Address()),
+		testResourceNamespace: address,
 	}
+
 	createRadiusPlane(ucp, rps)
 
 	createResourceGroup(ucp, testResourceGroupID)
+
+	createResourceProvider(ucp)
+
+	createResourceType(ucp, resourceTypeURL)
+
+	createLocation(ucp, address)
 
 	message := "here is some test data"
 
@@ -222,8 +240,8 @@ func Test_RadiusPlane_ResourceAsync(t *testing.T) {
 
 		location := response.Raw.Header.Get("Location")
 		azureAsyncOperation := response.Raw.Header.Get("Azure-AsyncOperation")
-		require.True(t, strings.HasPrefix(location, ucp.BaseURL), "Location starts with UCP URL")
-		require.True(t, strings.HasPrefix(azureAsyncOperation, ucp.BaseURL), "Azure-AsyncOperation starts with UCP URL")
+		require.True(t, strings.HasPrefix(location, ucp.BaseURL()), "Location starts with UCP URL")
+		require.True(t, strings.HasPrefix(azureAsyncOperation, ucp.BaseURL()), "Azure-AsyncOperation starts with UCP URL")
 	})
 
 	t.Run("LIST (during PUT)", func(t *testing.T) {
@@ -382,7 +400,7 @@ func Test_RadiusPlane_ResourceAsync(t *testing.T) {
 	})
 }
 
-func createRadiusPlane(ucp *testserver.TestServer, resourceProviders map[string]*string) {
+func createRadiusPlane(ucp *testhost.TestHost, resourceProviders map[string]*string) {
 	body := v20231001preview.RadiusPlaneResource{
 		Location: to.Ptr(v1.LocationGlobal),
 		Properties: &v20231001preview.RadiusPlaneResourceProperties{
@@ -393,11 +411,52 @@ func createRadiusPlane(ucp *testserver.TestServer, resourceProviders map[string]
 	response.EqualsStatusCode(http.StatusOK)
 }
 
-func createResourceGroup(ucp *testserver.TestServer, id string) {
+func createResourceGroup(ucp *testhost.TestHost, id string) {
 	body := v20231001preview.ResourceGroupResource{
 		Location:   to.Ptr(v1.LocationGlobal),
 		Properties: &v20231001preview.ResourceGroupProperties{},
 	}
 	response := ucp.MakeTypedRequest(http.MethodPut, id+"?"+apiVersionParameter, body)
 	response.EqualsStatusCode(http.StatusOK)
+}
+
+func createResourceProvider(ucp *testhost.TestHost) {
+	body := v20231001preview.ResourceProviderResource{
+		Location:   to.Ptr(v1.LocationGlobal),
+		Properties: &v20231001preview.ResourceProviderProperties{},
+	}
+	response := ucp.MakeTypedRequest("PUT", testResourceProviderID+"?"+apiVersionParameter, body)
+	response.WaitForOperationComplete(nil)
+	response.EqualsStatusCode(http.StatusCreated)
+}
+
+func createResourceType(ucp *testhost.TestHost, id string) {
+	body := v20231001preview.ResourceTypeResource{
+		Properties: &v20231001preview.ResourceTypeProperties{
+			DefaultAPIVersion: to.Ptr("2023-10-01-preview"),
+		},
+	}
+
+	response := ucp.MakeTypedRequest(http.MethodPut, id+"?"+apiVersionParameter, body)
+	response.WaitForOperationComplete(nil)
+	response.EqualsStatusCode(http.StatusCreated)
+}
+
+func createLocation(server *testhost.TestHost, address *string) {
+	body := v20231001preview.LocationResource{
+		Properties: &v20231001preview.LocationProperties{
+			Address: address,
+			ResourceTypes: map[string]*v20231001preview.LocationResourceType{
+				"testResources": {
+					APIVersions: map[string]map[string]any{
+						"2023-10-01-preview": {},
+					},
+				},
+			},
+		},
+	}
+
+	response := server.MakeTypedRequest("PUT", locationID+"?"+apiVersionParameter, body)
+	response.WaitForOperationComplete(nil)
+	response.EqualsStatusCode(http.StatusCreated)
 }
