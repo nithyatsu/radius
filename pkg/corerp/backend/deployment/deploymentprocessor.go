@@ -25,7 +25,6 @@ import (
 	"strings"
 
 	v1 "github.com/radius-project/radius/pkg/armrpc/api/v1"
-	rp_pr "github.com/radius-project/radius/pkg/rp/portableresources"
 	rp_util "github.com/radius-project/radius/pkg/rp/util"
 	rpv1 "github.com/radius-project/radius/pkg/rp/v1"
 
@@ -575,17 +574,16 @@ func (dp *deploymentProcessor) getResourceDataByID(ctx context.Context, resource
 
 func (dp *deploymentProcessor) buildResourceDependency(resourceID resources.ID, applicationID string, resource v1.DataModelInterface, outputResources []rpv1.OutputResource, computedValues map[string]any, secretValues map[string]rpv1.SecretValueReference, recipeData portableresources.RecipeData) (ResourceData, error) {
 	var appID *resources.ID
+	// Application id is mandatory for core resource types and is a required field.
 	if applicationID != "" {
 		parsedID, err := resources.ParseResource(applicationID)
 		if err != nil {
 			return ResourceData{}, v1.NewClientErrInvalidRequest(fmt.Sprintf("application ID %q for the resource %q is not a valid id. Error: %s", applicationID, resourceID.String(), err.Error()))
 		}
 		appID = &parsedID
-	} else if rp_pr.IsValidPortableResourceType(resourceID.TypeSegments()[0].Type) {
-		// Application id is optional for portable resource types
-		appID = nil
 	} else {
-		return ResourceData{}, fmt.Errorf("missing required application id for the resource %q", resourceID.String())
+		// Application id is optional for portable resource types and UDTs.
+		appID = nil
 	}
 
 	return ResourceData{
