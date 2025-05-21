@@ -82,6 +82,7 @@ type bicepDriver struct {
 // Execute fetches recipe contents from container registry, creates a deployment ID, a recipe context parameter, recipe parameters,
 // a provider config, and deploys a bicep template for the recipe using UCP deployment client, then polls until the deployment
 // is done and prepares the recipe response.
+// opts-->baseopts-->recipe --> parametr
 func (d *bicepDriver) Execute(ctx context.Context, opts ExecuteOptions) (*recipes.RecipeOutput, error) {
 	logger := logr.FromContextOrDiscard(ctx)
 	logger.Info(fmt.Sprintf("Deploying recipe: %q, template: %q", opts.Definition.Name, opts.Definition.TemplatePath))
@@ -122,7 +123,9 @@ func (d *bicepDriver) Execute(ctx context.Context, opts ExecuteOptions) (*recipe
 	// get the parameters after resolving the conflict between developer and operator parameters
 	// if the recipe template also has the context parameter defined then add it to the parameter for deployment
 	isContextParameterDefined := hasContextParameter(recipeData)
-	parameters := createRecipeParameters(opts.Recipe.Parameters, opts.Definition.Parameters, isContextParameterDefined, recipeContext)
+	parameters := createRecipe
+
+	Parameters(opts.Recipe.Parameters, opts.Definition.Parameters, isContextParameterDefined, recipeContext)
 
 	deploymentName := deploymentPrefix + strconv.FormatInt(time.Now().UnixNano(), 10)
 	deploymentID, err := createDeploymentID(recipeContext.Resource.ID, deploymentName)

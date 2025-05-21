@@ -170,6 +170,56 @@ func (c *CreateOrUpdateResource[P, T]) executeRecipeIfNeeded(ctx context.Context
 		return nil, err
 	}
 
+	// check if the resourceProperties has connections if so get the resource ID
+
+	// and get the output variables of that resource
+	// and populate the parameter values of this recipe with those output variables
+
+	if resourceProperties != nil && resourceProperties["connections"] != nil {
+		connections := resourceProperties["connections"].(map[string]interface{})
+		for _, connection := range connections {
+			if connection != nil {
+				connectionProperties := connection.(map[string]interface{})
+				if connectionProperties["source"] != nil {
+					resourceID := connectionProperties["source"].(string)
+
+					// get the output variables of that resource
+					connectedResource, err := c.DatabaseClient().Get(ctx, resourceID)
+					if errors.Is(&database.ErrNotFound{ID: resourceID}, err) {
+						return nil, err
+					} else if err != nil {
+						return nil, err
+					}
+
+					if connectedResource != nil {
+						connectedResourceProperties, err := GetPropertiesFromResource(connectedResource.Data)
+						if err != nil {
+							return nil, err
+						}
+						// populate the parameter values of this recipe with those output variables
+						// for example if the connected resource has an output variable called "hostname"
+
+						status := connectedResourceProperties["status"].(map[string]interface{})
+						if status != nil {
+							outputVariables := status["outputVariables"].(map[string]interface{})
+
+							if outputVariables != nil {
+								//add each output variable to the recipe parameters
+								if recipe.Parameters == nil {
+									recipe.Parameters = map[string]interface{}{}
+								}
+								for outputVariableName, outputVariableValue := range outputVariables {
+									recipe.Parameters[outputVariableName] = outputVariableValue
+								}
+							}
+						}
+
+					}
+				}
+			}
+		}
+	}
+
 	metadata := recipes.ResourceMetadata{
 		Name:          recipe.Name,
 		Parameters:    recipe.Parameters,
