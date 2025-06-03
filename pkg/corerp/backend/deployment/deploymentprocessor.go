@@ -37,6 +37,7 @@ import (
 	dapr_ctrl "github.com/radius-project/radius/pkg/daprrp/frontend/controller"
 	dsrp_dm "github.com/radius-project/radius/pkg/datastoresrp/datamodel"
 	ds_ctrl "github.com/radius-project/radius/pkg/datastoresrp/frontend/controller"
+	dynamicrp_dm "github.com/radius-project/radius/pkg/dynamicrp/datamodel"
 	msg_dm "github.com/radius-project/radius/pkg/messagingrp/datamodel"
 	msg_ctrl "github.com/radius-project/radius/pkg/messagingrp/frontend/controller"
 	"github.com/radius-project/radius/pkg/portableresources"
@@ -385,6 +386,7 @@ func (dp *deploymentProcessor) getEnvOptions(ctx context.Context, env *corerp_dm
 	publicEndpointOverride := os.Getenv("RADIUS_PUBLIC_ENDPOINT_OVERRIDE")
 
 	envOpts := renderers.EnvironmentOptions{
+		Resource:       resources.MustParse(env.ID),
 		CloudProviders: &env.Properties.Providers,
 	}
 
@@ -397,6 +399,16 @@ func (dp *deploymentProcessor) getEnvOptions(ctx context.Context, env *corerp_dm
 			return renderers.EnvironmentOptions{}, errors.New("kubernetes' namespace is not specified")
 		}
 		envOpts.Namespace = kubeProp.Namespace
+
+	case rpv1.ACIComputeKind:
+		c := &env.Properties.Compute.ACICompute
+		if c.ResourceGroup == "" {
+			c.ResourceGroup = env.Properties.Providers.Azure.Scope
+		}
+		if c.ResourceGroup == "" {
+			return renderers.EnvironmentOptions{}, errors.New("resource group is not specified")
+		}
+		envOpts.Compute = &env.Properties.Compute
 
 	default:
 		return renderers.EnvironmentOptions{}, fmt.Errorf("%s is unsupported", env.Properties.Compute.Kind)
@@ -571,7 +583,17 @@ func (dp *deploymentProcessor) getResourceDataByID(ctx context.Context, resource
 		}
 		return dp.buildResourceDependency(resourceID, obj.Properties.Application, obj, obj.Properties.Status.OutputResources, obj.ComputedValues, obj.SecretValues, portableresources.RecipeData{})
 	default:
-		return ResourceData{}, fmt.Errorf("unsupported resource type: %q for resource ID: %q", resourceType, resourceID.String())
+		obj := &dynamicrp_dm.DynamicResource{}
+		if err = resource.As(obj); err != nil {
+			return ResourceData{}, fmt.Errorf(errMsg, resourceID.String(), err)
+		}
+
+		// At present, we combine secret data with computed values into bindings for UDT.
+		// UDTs also do not have support for secrets yet.
+		// We are for now passing in empty values for these two parameters here so that we can enable graph.
+		// This should change once we implement secret support for UDTs and also seperate secrets and computed
+		// values into their own structure.
+		return dp.buildResourceDependency(resourceID, obj.ResourceMetadata().ApplicationID(), obj, obj.OutputResources(), map[string]any{}, map[string]rpv1.SecretValueReference{}, portableresources.RecipeData{})
 	}
 }
 

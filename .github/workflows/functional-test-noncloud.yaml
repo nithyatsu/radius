@@ -51,7 +51,12 @@ env:
   KIND_VER: "v0.23.0"
   # Kubectl version
   KUBECTL_VER: "v1.30.0"
-
+  # Dapr CLI version
+  DAPR_CLI_VER: "1.15.1"
+  # Dapr runtime version
+  DAPR_RUNTIME_VER: "1.15.4"
+  # Dapr dashboard version
+  DAPR_DASHBOARD_VER: "0.15.0"
   # The radius functional test timeout
   FUNCTIONALTEST_TIMEOUT: 15m
   # The base directory for storing test logs
@@ -364,10 +369,14 @@ jobs:
           USE_CERT_FILE: "true"
           TEMP_CERT_DIR: ${{ steps.create-local-registry.outputs.temp-cert-dir }}
       
+      - name: Setup Flux CLI
+        uses: fluxcd/flux2/action@main
+        with:
+          version: '2.5.1'
+  
       - name: Install Flux Source Controller
         if: matrix.name == 'kubernetes-noncloud'
         run: |
-          curl -s https://fluxcd.io/install.sh | FLUX_VERSION=2.5.1 sudo bash
           flux install --namespace=flux-system --version=v2.5.1 --components=source-controller --network-policy=false
           kubectl wait --for=condition=available deployment -l app.kubernetes.io/component=source-controller -n flux-system --timeout=120s
 
@@ -395,6 +404,13 @@ jobs:
           curl -s http://localhost:30080 > /dev/null || (echo "Port forwarding failed" && exit 1)
           
           echo "Port forwarding established successfully"
+
+      - name: Install Dapr CLI and control plane
+        if: matrix.name == 'daprrp-noncloud'
+        run: |
+          wget -q https://raw.githubusercontent.com/dapr/cli/master/install/install.sh -O - | /bin/bash -s ${{ env.DAPR_CLI_VER }}
+          dapr init -k --wait --timeout 600 --runtime-version ${{ env.DAPR_RUNTIME_VER }} --dashboard-version ${{ env.DAPR_DASHBOARD_VER }}
+
       - name: Publish Terraform test recipes
         run: |
           make publish-test-terraform-recipes
@@ -414,7 +430,7 @@ jobs:
         run: |
           export PATH=$GITHUB_WORKSPACE/bin:$PATH
           which rad || { echo "cannot find rad"; exit 1; }
-          rad bicep publish-extension -f ./test/functional-portable/dynamicrp/noncloud/resources/testdata/usertypealpha.yaml --target br:${{ env.LOCAL_REGISTRY_SERVER }}:${{ env.LOCAL_REGISTRY_PORT }}/testresources:${{ env.REL_VERSION == 'edge' && 'latest' || env.REL_VERSION }} --force
+          rad bicep publish-extension -f ./test/functional-portable/dynamicrp/noncloud/resources/testdata/testresourcetypes.yaml --target br:${{ env.LOCAL_REGISTRY_SERVER }}:${{ env.LOCAL_REGISTRY_PORT }}/testresources:${{ env.REL_VERSION == 'edge' && 'latest' || env.REL_VERSION }} --force
 
       - name: Generate test bicepconfig.json
         run: |

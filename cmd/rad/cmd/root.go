@@ -70,6 +70,7 @@ import (
 	"github.com/radius-project/radius/pkg/cli/cmd/run"
 	"github.com/radius-project/radius/pkg/cli/cmd/uninstall"
 	uninstall_kubernetes "github.com/radius-project/radius/pkg/cli/cmd/uninstall/kubernetes"
+	version "github.com/radius-project/radius/pkg/cli/cmd/version"
 	workspace_create "github.com/radius-project/radius/pkg/cli/cmd/workspace/create"
 	workspace_delete "github.com/radius-project/radius/pkg/cli/cmd/workspace/delete"
 	workspace_list "github.com/radius-project/radius/pkg/cli/cmd/workspace/list"
@@ -234,10 +235,12 @@ func initSubCommands() {
 		Prompter:            &prompt.Impl{},
 		ConfigFileInterface: &framework.ConfigFileInterfaceImpl{},
 		KubernetesInterface: &kubernetes.Impl{},
-		HelmInterface:       &helm.Impl{},
-		NamespaceInterface:  &namespace.Impl{},
-		AWSClient:           aws.NewClient(),
-		AzureClient:         azure.NewClient(),
+		HelmInterface: &helm.Impl{
+			Helm: helm.NewHelmClient(),
+		},
+		NamespaceInterface: &namespace.Impl{},
+		AWSClient:          aws.NewClient(),
+		AzureClient:        azure.NewClient(),
 	}
 
 	deployCmd, _ := cmd_deploy.NewCommand(framework)
@@ -371,6 +374,9 @@ func initSubCommands() {
 
 	uninstallKubernetesCmd, _ := uninstall_kubernetes.NewCommand(framework)
 	uninstallCmd.AddCommand(uninstallKubernetesCmd)
+
+	versionCmd, _ := version.NewCommand(framework)
+	RootCmd.AddCommand(versionCmd)
 }
 
 // The dance we do with config is kinda complex. We want commands to be able to retrieve a config (*viper.Viper)

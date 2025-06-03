@@ -95,6 +95,7 @@ func RegisterFile(ctx context.Context, clientFactory *v20231001preview.ClientFac
 				Properties: &v20231001preview.ResourceTypeProperties{
 					Capabilities:      to.SliceOfPtrs(resourceType.Capabilities...),
 					DefaultAPIVersion: resourceType.DefaultAPIVersion,
+					Description:       resourceType.Description,
 				},
 			}, nil)
 			if err != nil {
@@ -116,9 +117,12 @@ func RegisterFile(ctx context.Context, clientFactory *v20231001preview.ClientFac
 
 		for apiVersionName := range resourceType.APIVersions {
 			logIfEnabled(logger, "Creating API Version %s/%s@%s", resourceProvider.Name, resourceTypeName, apiVersionName)
+			schema := resourceType.APIVersions[apiVersionName].Schema.(map[string]any)
 			err = retryOperation(ctx, func() error {
 				apiVersionsPoller, err := clientFactory.NewAPIVersionsClient().BeginCreateOrUpdate(ctx, planeName, resourceProvider.Name, resourceTypeName, apiVersionName, v20231001preview.APIVersionResource{
-					Properties: &v20231001preview.APIVersionProperties{},
+					Properties: &v20231001preview.APIVersionProperties{
+						Schema: schema,
+					},
 				}, nil)
 				if err != nil {
 					return err
@@ -237,6 +241,7 @@ func RegisterType(ctx context.Context, clientFactory *v20231001preview.ClientFac
 			Properties: &v20231001preview.ResourceTypeProperties{
 				Capabilities:      to.SliceOfPtrs(resourceType.Capabilities...),
 				DefaultAPIVersion: resourceType.DefaultAPIVersion,
+				Description:       resourceType.Description,
 			},
 		}, nil)
 		if err != nil {
@@ -254,9 +259,12 @@ func RegisterType(ctx context.Context, clientFactory *v20231001preview.ClientFac
 	}
 
 	for apiVersionName := range resourceType.APIVersions {
+		schema := resourceType.APIVersions[apiVersionName].Schema.(map[string]any)
 		logIfEnabled(logger, "Creating API Version %s/%s@%s", resourceProvider.Name, typeName, apiVersionName)
 		apiVersionsPoller, err := clientFactory.NewAPIVersionsClient().BeginCreateOrUpdate(ctx, planeName, resourceProvider.Name, typeName, apiVersionName, v20231001preview.APIVersionResource{
-			Properties: &v20231001preview.APIVersionProperties{},
+			Properties: &v20231001preview.APIVersionProperties{
+				Schema: schema,
+			},
 		}, nil)
 		if err != nil {
 			return err
@@ -319,12 +327,13 @@ func logIfEnabled(logger func(format string, args ...any), format string, args .
 func retryOperation(ctx context.Context, operation func() error, logger func(format string, args ...any)) error {
 	backoff := initialBackoff
 
+	var err error
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		err := operation()
+		err = operation()
 		if err != nil {
 			if is409ConflictError(err) {
 				if logger != nil {
-					logger("Got 409 conflict on attempt %d/%d. Retrying in %s...", attempt, maxRetries, backoff)
+					logger("Got 409 conflict on attempt %d/%d with error: %v. Retrying in %s...", attempt, maxRetries, err, backoff)
 				}
 				// Wait for either the context to be cancelled or the backoff duration to pass
 				select {
@@ -341,7 +350,7 @@ func retryOperation(ctx context.Context, operation func() error, logger func(for
 		}
 		return nil
 	}
-	return fmt.Errorf("exceeded %d retries", maxRetries)
+	return fmt.Errorf("exceeded %d retries, err: %w", maxRetries, err)
 }
 
 // is409ConflictError returns true if the error is a 409 Conflict error

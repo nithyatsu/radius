@@ -69,19 +69,10 @@ func Test_Run(t *testing.T) {
 		}
 
 		helmMock.EXPECT().CheckRadiusInstall("test-context").
-			Return(helm.InstallState{RadiusInstalled: true, RadiusVersion: "test-version", DaprInstalled: true, DaprVersion: "test-version"}, nil).
+			Return(helm.InstallState{RadiusInstalled: true, RadiusVersion: "test-version"}, nil).
 			Times(1)
 
-		helmMock.EXPECT().UninstallRadius(ctx, helm.ClusterOptions{
-			Radius: helm.ChartOptions{
-				Namespace:   "radius-system",
-				ReleaseName: "radius",
-			},
-			Dapr: helm.ChartOptions{
-				Namespace:   "dapr-system",
-				ReleaseName: "dapr",
-			},
-		}, "test-context").
+		helmMock.EXPECT().UninstallRadius(ctx, helm.NewDefaultClusterOptions(), "test-context").
 			Return(nil).
 			Times(1)
 
@@ -143,19 +134,10 @@ func Test_Run(t *testing.T) {
 		}
 
 		helmMock.EXPECT().CheckRadiusInstall("test-context").
-			Return(helm.InstallState{RadiusInstalled: true, RadiusVersion: "test-version", DaprInstalled: true, DaprVersion: "test-version"}, nil).
+			Return(helm.InstallState{RadiusInstalled: true, RadiusVersion: "test-version"}, nil).
 			Times(1)
 
-		helmMock.EXPECT().UninstallRadius(ctx, helm.ClusterOptions{
-			Radius: helm.ChartOptions{
-				Namespace:   "radius-system",
-				ReleaseName: "radius",
-			},
-			Dapr: helm.ChartOptions{
-				Namespace:   "dapr-system",
-				ReleaseName: "dapr",
-			},
-		}, "test-context").
+		helmMock.EXPECT().UninstallRadius(ctx, helm.NewDefaultClusterOptions(), "test-context").
 			Return(nil).
 			Times(1)
 

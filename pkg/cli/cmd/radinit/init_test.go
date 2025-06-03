@@ -888,7 +888,7 @@ func Test_Run_InstallAndCreateEnvironment(t *testing.T) {
 			helmInterface := helm.NewMockInterface(ctrl)
 			helmInterface.EXPECT().
 				InstallRadius(context.Background(), gomock.Any(), "kind-kind").
-				Return(true, nil).
+				Return(nil).
 				Times(1)
 
 			prompter := prompt.NewMockInterface(ctrl)
@@ -1064,7 +1064,7 @@ func initSelectCloudProvider(prompter *prompt.MockInterface, value string) {
 func initHelmMockRadiusInstalled(helmMock *helm.MockInterface) {
 	helmMock.EXPECT().
 		CheckRadiusInstall(gomock.Any()).
-		Return(helm.InstallState{RadiusInstalled: true, RadiusVersion: "test-version", DaprInstalled: true, DaprVersion: "test-version"}, nil).Times(1)
+		Return(helm.InstallState{RadiusInstalled: true, RadiusVersion: "test-version"}, nil).Times(1)
 }
 
 func initHelmMockRadiusNotInstalled(helmMock *helm.MockInterface) {

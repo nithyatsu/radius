@@ -24,7 +24,7 @@ import (
 	rpv1 "github.com/radius-project/radius/pkg/rp/v1"
 )
 
-// Configuration represents kubernetes runtime and cloud provider configuration, which is used by the driver while deploying recipes.
+// Configuration represents runtime and cloud provider configuration, which is used by the driver while deploying recipes.
 type Configuration struct {
 	// Kubernetes Runtime configuration for the environment.
 	Runtime RuntimeConfiguration
@@ -36,9 +36,10 @@ type Configuration struct {
 	RecipeConfig datamodel.RecipeConfigProperties
 }
 
-// RuntimeConfiguration represents Kubernetes Runtime configuration for the environment.
+// RuntimeConfiguration represents Runtime configuration for the environment.
 type RuntimeConfiguration struct {
-	Kubernetes *KubernetesRuntime `json:"kubernetes,omitempty"`
+	Kubernetes              *KubernetesRuntime              `json:"kubernetes,omitempty"`
+	AzureContainerInstances *AzureContainerInstancesRuntime `json:"azureContainerInstances,omitempty"`
 }
 
 // KubernetesRuntime represents application and environment namespaces.
@@ -47,6 +48,11 @@ type KubernetesRuntime struct {
 	Namespace string `json:"namespace,omitempty"`
 	// EnvironmentNamespace is set to environment namespace.
 	EnvironmentNamespace string `json:"environmentNamespace"`
+}
+
+// AzureContainerInstancesRuntime represents Azure Container Instances runtime configuration.
+type AzureContainerInstancesRuntime struct {
+	// TODO: Add runtime configuration for Azure Container Instances
 }
 
 // EnvironmentDefinition represents the recipe configuration details.
@@ -67,7 +73,7 @@ type EnvironmentDefinition struct {
 	PlainHTTP bool
 }
 
-// ResourceMetadata represents recipe details provided while creating a portable resource.
+// ResourceMetadata represents recipe details provided while deploying a portable or a user-defined resource.
 type ResourceMetadata struct {
 	// Name represents the name of the recipe within the environment
 	Name string
@@ -77,6 +83,8 @@ type ResourceMetadata struct {
 	EnvironmentID string
 	// ResourceID represents fully qualified resource ID for the resource the recipe is deploying
 	ResourceID string
+	// Properties represents the properties of the resource that the recipe is deploying
+	Properties map[string]any
 	// Parameters represents key/value pairs to pass into the recipe template. Overrides any parameters set by the environment.
 	Parameters map[string]any
 }

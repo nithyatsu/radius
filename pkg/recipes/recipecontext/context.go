@@ -48,18 +48,20 @@ func New(metadata *recipes.ResourceMetadata, config *recipes.Configuration) (*Co
 				Name: parsedResource.Name(),
 				ID:   metadata.ResourceID,
 			},
-			Type: parsedResource.Type(),
+			Type:       parsedResource.Type(),
+			Properties: metadata.Properties,
 		},
 		Environment: ResourceInfo{
 			Name: parsedEnv.Name(),
 			ID:   metadata.EnvironmentID,
 		},
-		Runtime: recipes.RuntimeConfiguration{
-			Kubernetes: &recipes.KubernetesRuntime{
-				Namespace:            config.Runtime.Kubernetes.EnvironmentNamespace,
-				EnvironmentNamespace: config.Runtime.Kubernetes.EnvironmentNamespace,
-			},
-		},
+	}
+
+	if config.Runtime.Kubernetes != nil {
+		recipeContext.Runtime.Kubernetes = &recipes.KubernetesRuntime{
+			Namespace:            config.Runtime.Kubernetes.Namespace,
+			EnvironmentNamespace: config.Runtime.Kubernetes.EnvironmentNamespace,
+		}
 	}
 
 	if metadata.ApplicationID != "" {
@@ -69,7 +71,9 @@ func New(metadata *recipes.ResourceMetadata, config *recipes.Configuration) (*Co
 		}
 		recipeContext.Application.ID = metadata.ApplicationID
 		recipeContext.Application.Name = parsedApp.Name()
-		recipeContext.Runtime.Kubernetes.Namespace = config.Runtime.Kubernetes.Namespace
+		if config.Runtime.Kubernetes != nil {
+			recipeContext.Runtime.Kubernetes.Namespace = config.Runtime.Kubernetes.Namespace
+		}
 	}
 
 	providers := config.Providers

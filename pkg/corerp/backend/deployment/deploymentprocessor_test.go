@@ -32,6 +32,7 @@ import (
 	"github.com/radius-project/radius/pkg/corerp/renderers"
 	"github.com/radius-project/radius/pkg/corerp/renderers/container"
 	dsrp_dm "github.com/radius-project/radius/pkg/datastoresrp/datamodel"
+	dynamicrp_dm "github.com/radius-project/radius/pkg/dynamicrp/datamodel"
 	"github.com/radius-project/radius/pkg/portableresources"
 	pr_dm "github.com/radius-project/radius/pkg/portableresources/datamodel"
 	pr_renderers "github.com/radius-project/radius/pkg/portableresources/renderers"
@@ -193,6 +194,33 @@ func getTestResourceID(id string) resources.ID {
 	}
 
 	return resourceID
+}
+
+func buildDynamicResourceWithRecipe() dynamicrp_dm.DynamicResource {
+	return dynamicrp_dm.DynamicResource{
+		BaseResource: v1.BaseResource{
+			TrackedResource: v1.TrackedResource{
+				ID: "/planes/radius/local/resourcegroups/default/providers/Test.Datastores/postgres/postgresudt",
+			},
+		},
+		Properties: map[string]any{
+			"application": "/subscriptions/test-sub/resourceGroups/test-group/providers/Applications.Core/applications/testApplication",
+			"environment": "/subscriptions/test-subscription/resourceGroups/test-resource-group/providers/Applications.Core/environments/env0",
+			"status": map[string]any{
+				"outputResources": []map[string]any{
+					{
+						"id":            "/planes/kubernetes/local/namespaces/todoenvudt-todoappudt/providers/core/Service/postgres-4h4z6i5v7uqm2",
+						"localID":       "",
+						"radiusManaged": true,
+					},
+				},
+				"binding": map[string]any{
+					"connectionString": "Server=mydb;User=admin;",
+					"databaseName":     "testdb",
+				},
+			},
+		},
+	}
 }
 
 func buildMongoDBWithRecipe() dsrp_dm.MongoDatabase {
@@ -981,6 +1009,12 @@ func Test_getEnvOptions_PublicEndpointOverride(t *testing.T) {
 	dp := deploymentProcessor{mocks.model, nil, nil, nil}
 
 	env := &datamodel.Environment{
+		BaseResource: v1.BaseResource{
+			TrackedResource: v1.TrackedResource{
+				ID:   "/subscriptions/test-sub/resourceGroups/test-group/providers/Applications.Core/environments/test-env",
+				Name: "test-env",
+			},
+		},
 		Properties: datamodel.EnvironmentProperties{
 			Compute: rpv1.EnvironmentCompute{
 				Kind: rpv1.KubernetesComputeKind,
@@ -1055,6 +1089,25 @@ func Test_getResourceDataByID(t *testing.T) {
 		resourceData, err := dp.getResourceDataByID(ctx, depId)
 		require.NoError(t, err)
 		require.Equal(t, resourceData.RecipeData, mongoResource.RecipeData)
+	})
+
+	t.Run("Get outputresources from Dynamic Resource", func(t *testing.T) {
+		depId, _ := resources.ParseResource("/planes/radius/local/resourcegroups/default/providers/Test.Datastores/postgres/postgresudt")
+		postgresResource := buildDynamicResourceWithRecipe()
+
+		mr := database.Object{
+			Metadata: database.Metadata{
+				ID: postgresResource.ID,
+			},
+			Data: postgresResource,
+		}
+
+		mocks.databaseClient.EXPECT().Get(gomock.Any(), gomock.Any()).Times(1).Return(&mr, nil)
+
+		resourceData, err := dp.getResourceDataByID(ctx, depId)
+		require.NoError(t, err)
+		require.Equal(t, resourceData.OutputResources, postgresResource.OutputResources())
+
 	})
 }
 

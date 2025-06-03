@@ -191,6 +191,123 @@ func Test_Gateway_SSLPassthrough(t *testing.T) {
 	test.Test(t)
 }
 
+func Test_Gateway_Timeout(t *testing.T) {
+	template := "testdata/corerp-resources-gateway-timeout.bicep"
+	appName := "gateway-timeout-app"
+	appNamespace := "default-gateway-timeout-app"
+	gatewayName := "gateway-timeout"
+	containerName := "gateway-timeout-ctnr"
+
+	test := rp.NewRPTest(t, appName, []rp.TestStep{
+		{
+			Executor: step.NewDeployExecutor(template, testutil.GetMagpieImage(), "appName="+appName, "gatewayName="+gatewayName, "containerName="+containerName),
+			RPResources: &validation.RPResourceSet{
+				Resources: []validation.RPResource{
+					{
+						Name: appName,
+						Type: validation.ApplicationsResource,
+					},
+					{
+						Name: gatewayName,
+						Type: validation.GatewaysResource,
+						App:  appName,
+					},
+				},
+			},
+			K8sObjects: &validation.K8sObjectSet{
+				Namespaces: map[string][]validation.K8sObject{
+					appNamespace: {
+						validation.NewK8sPodForResource(appName, containerName),
+						validation.NewK8sHTTPProxyForResource(appName, gatewayName),
+						validation.NewK8sHTTPProxyForResource(appName, containerName),
+						validation.NewK8sServiceForResource(appName, containerName),
+					},
+				},
+			},
+			PostStepVerify: func(ctx context.Context, t *testing.T, ct rp.RPTest) {
+				// Get hostname from root HTTPProxy in application namespace
+				metadata, err := testutil.GetHTTPProxyMetadata(ctx, ct.Options.Client, appNamespace, appName)
+				require.NoError(t, err)
+				t.Logf("found root proxy with hostname: {%s} and status: {%s}", metadata.Hostname, metadata.Status)
+
+				// Set up pod port-forwarding for contour-envoy
+				t.Logf("Setting up portforward")
+				err = testGatewayWithPortForward(t, ctx, ct, metadata.Hostname, httpRemotePort, false, []GatewayTestConfig{
+					// /healthz is exposed on frontend container
+					{
+						Path:               "healthz",
+						ExpectedStatusCode: http.StatusOK,
+					},
+				})
+				if err != nil {
+					t.Logf("Failed to test Gateway via portforward with error: %s", err)
+				} else {
+					// Successfully ran tests
+					return
+				}
+
+				require.Fail(t, "Gateway tests failed")
+			},
+		},
+	})
+	test.Test(t)
+}
+
+func Test_Gateway_Timeout_Backend_Exceeds_Request(t *testing.T) {
+	template := "testdata/corerp-resources-gateway-timeout-ber.bicep"
+	appName := "gateway-timeout-ber-app"
+	containerName := "gateway-timeout-ber-ctnr"
+	gatewayName := "gateway-timeout-ber"
+
+	validateFn := step.ValidateAnyDetails("DeploymentFailed", []step.DeploymentErrorDetail{
+		{
+			Code: "ResourceDeploymentFailure",
+			Details: []step.DeploymentErrorDetail{
+				{
+					Code:            "BadRequest",
+					MessageContains: "request timeout must be greater than or equal to backend request timeout",
+				},
+			},
+		},
+	})
+	test := rp.NewRPTest(t, appName, []rp.TestStep{
+		{
+			Executor:                               step.NewDeployErrorExecutor(template, validateFn, testutil.GetMagpieImage(), "appName="+appName, "gatewayName="+gatewayName, "containerName="+containerName),
+			SkipObjectValidation:                   true,
+			SkipKubernetesOutputResourceValidation: true,
+		},
+	})
+	test.Test(t)
+}
+
+func Test_Gateway_Timeout_Invalid_Duration(t *testing.T) {
+	template := "testdata/corerp-resources-gateway-timeout-invalid.bicep"
+	appName := "gateway-timeout-invalid-app"
+	containerName := "gateway-timeout-invalid-ctnr"
+	gatewayName := "gateway-timeout-invalid"
+
+	validateFn := step.ValidateAnyDetails("DeploymentFailed", []step.DeploymentErrorDetail{
+		{
+			Code: "HttpRequestPayloadAPISpecValidationFailed",
+			Details: []step.DeploymentErrorDetail{
+				{
+					Code:            "InvalidProperties",
+					MessageContains: "properties.routes.timeoutPolicy.request in body should match",
+				},
+			},
+		},
+	})
+
+	test := rp.NewRPTest(t, appName, []rp.TestStep{
+		{
+			Executor:                               step.NewDeployErrorExecutor(template, validateFn, testutil.GetMagpieImage(), "appName="+appName, "gatewayName="+gatewayName, "containerName="+containerName),
+			SkipObjectValidation:                   true,
+			SkipKubernetesOutputResourceValidation: true,
+		},
+	})
+	test.Test(t)
+}
+
 func Test_Gateway_TLSTermination(t *testing.T) {
 	template := "testdata/corerp-resources-gateway-tlstermination.bicep"
 	name := "corerp-resources-gateway-tlstermination"
