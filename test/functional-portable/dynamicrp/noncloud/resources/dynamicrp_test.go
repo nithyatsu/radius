@@ -319,9 +319,13 @@ func Test_DynamicRP_ExternalResource(t *testing.T) {
 // This test verifies the connections from a container to an UDT  injects the environment variables
 // from the UDT into the container.
 // It has 2 steps:
-// 1. Deploy the environment and postgres resource to the environment namespace.
-// 2. Deploy an app that uses a container resource  which connects to the postgres resource.
-// Verify env variables are injected automatically into the container.
+// 1. Resource Type Registration:
+// - Registers a user-defined resource type "Test.Resources/postgres" using the CLI.
+// 2. Resource Deployment:
+// - Deploys a Bicep template that creates a container and connects it to the UDT.
+// - Validates the creation of required resources (app, container, and UDT instance) in the Kubernetes cluster.
+// - Validates the container has environment variables set with the values from the UDT instance.
+
 func Test_Container_ConnectionTo_UDT(t *testing.T) {
 	existingTemplate := "testdata/container2udt-connection.bicep"
 	name := "dynamicrp-cntr2udt"
@@ -425,6 +429,16 @@ func Test_Container_ConnectionTo_UDT(t *testing.T) {
 	test.Test(t)
 }
 
+// Test_UDT_ConnectionTo_UDT tests the deployment of a user-defined resource type with connections to another UDT.
+// It consists of two main steps:
+// 1. Resource Type Registration:
+//   - Registers a user-defined resource type "Test.Resources/postgres" using the CLI.
+//
+// 2. Resource Deployment:
+//   - Deploys a Bicep template that creates a UDT instance and connects it to another UDT instance.
+//   - Validates the creation of required resources (app, postgres, and udtParent resource) in the Kubernetes cluster.
+//   - Validates that the pod template contains non-empty labels populated with values from
+//     the connected postgres resource properties in the udtParent deployment
 func Test_UDT_ConnectionTo_UDT(t *testing.T) {
 	existingTemplate := "testdata/udt2udt-connection.bicep"
 	name := "dynamicrp-udt2udt"
@@ -510,6 +524,16 @@ func Test_UDT_ConnectionTo_UDT(t *testing.T) {
 	})
 	test.Test(t)
 }
+
+// Test_UDT_ConnectionTo_UDTTF tests the deployment of a user-defined resource type with connections to another UDT.
+// It consists of two main steps:
+// 1. Resource Type Registration:
+//   - Registers a user-defined resource type "Test.Resources/udtParent" and "Test.Resources/udtChild" using the CLI.
+// 2. Resource Deployment:
+//   - Deploys a Terraform template that creates a UDT instance and connects it to another UDT instance.
+//   - Validates the creation of required resources (app, udtParent, and udtChild resource) in the Kubernetes cluster.
+//   - Validates that the pod template contains non-empty labels populated with values from
+//     the connected udtChild resource properties in the udtParent deployment
 
 func Test_UDT_ConnectionTo_UDTTF(t *testing.T) {
 	existingTemplate := "testdata/udt2udt-connection-tf.bicep"
