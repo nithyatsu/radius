@@ -9,13 +9,13 @@ param version string
 param password string = newGuid()
 
 resource udtconnenv 'Applications.Core/environments@2023-10-01-preview' = {
-  name: 'dynamicrp-postgres-env'
+  name: 'udtconnenv'
   location: 'global'
   properties: {
     compute: {
       kind: 'kubernetes'
       resourceId: 'self'
-      namespace: 'dynamicrp-postgres-env'
+      namespace: 'udtconnenv'
     }
     recipes: {
       'Test.Resources/postgres': {
