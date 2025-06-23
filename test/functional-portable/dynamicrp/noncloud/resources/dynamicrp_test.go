@@ -323,7 +323,7 @@ func Test_DynamicRP_ExternalResource(t *testing.T) {
 // - Registers a user-defined resource type "Test.Resources/postgres" using the CLI.
 // 2. Resource Deployment:
 // - Deploys a Bicep template that creates a container and connects it to the UDT.
-// - Validates the creation of required resources (app, container, and UDT instance) in the Kubernetes cluster.
+// - Validates the creation of required resources in the Kubernetes cluster.
 // - Validates the container has environment variables set with the values from the UDT instance.
 
 func Test_Container_ConnectionTo_UDT(t *testing.T) {
@@ -366,7 +366,7 @@ func Test_Container_ConnectionTo_UDT(t *testing.T) {
 						App:  appName,
 					},
 					{
-						Name: "existing-postgres",
+						Name: "udtconnpg",
 						Type: "test.resources/postgres",
 					},
 				},
@@ -436,7 +436,7 @@ func Test_Container_ConnectionTo_UDT(t *testing.T) {
 //
 // 2. Resource Deployment:
 //   - Deploys a Bicep template that creates a UDT instance and connects it to another UDT instance.
-//   - Validates the creation of required resources (app, postgres, and udtParent resource) in the Kubernetes cluster.
+//   - Validates the creation of required resources in the Kubernetes cluster.
 //   - Validates that the pod template contains non-empty labels populated with values from
 //     the connected postgres resource properties in the udtParent deployment
 func Test_UDT_ConnectionTo_UDT(t *testing.T) {
@@ -481,12 +481,12 @@ func Test_UDT_ConnectionTo_UDT(t *testing.T) {
 						App:  appName,
 					},
 					{
-						Name: "udtparent",
+						Name: "udttoudtparent",
 						Type: "test.resources/udtparent",
 						App:  appName,
 					},
 					{
-						Name: "udtchild",
+						Name: "udttoudtchild",
 						Type: "test.resources/postgres",
 					},
 				},
@@ -531,7 +531,7 @@ func Test_UDT_ConnectionTo_UDT(t *testing.T) {
 //   - Registers a user-defined resource type "Test.Resources/udtParent" and "Test.Resources/udtChild" using the CLI.
 // 2. Resource Deployment:
 //   - Deploys a Terraform template that creates a UDT instance and connects it to another UDT instance.
-//   - Validates the creation of required resources (app, udtParent, and udtChild resource) in the Kubernetes cluster.
+//   - Validates the creation of required resources in the Kubernetes cluster.
 //   - Validates that the pod template contains non-empty labels populated with values from
 //     the connected udtChild resource properties in the udtParent deployment
 

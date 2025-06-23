@@ -69,7 +69,7 @@ resource udtcntr 'Applications.Core/containers@2023-10-01-preview' = {
 
 
 resource udtconnpg 'Test.Resources/postgres@2023-10-01-preview' = {
-  name: 'existing-postgres'
+  name: 'udtconnpg'
   location: 'global'
   properties: {
     environment: udtconnenv.id

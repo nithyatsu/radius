@@ -50,8 +50,8 @@ resource udttoudtapp 'Applications.Core/applications@2023-10-01-preview' = {
 }
 
 
-resource udtparent 'Test.Resources/udtParent@2023-10-01-preview' = {
-    name: 'udtparent'
+resource udttoudtparent 'Test.Resources/udtParent@2023-10-01-preview' = {
+    name: 'udttoudtparent'
     properties: {
       environment: udttoudtenv.id
       application: udttoudtapp.id
@@ -59,15 +59,15 @@ resource udtparent 'Test.Resources/udtParent@2023-10-01-preview' = {
       port: '5432'
       connections: {
         databaseresource: {
-          source: udtchild.id
+          source: udttoudtchild.id
         }
       }
     }     
 }
 
 
-resource udtchild 'Test.Resources/postgres@2023-10-01-preview' = {
-  name: 'udtchild'
+resource udttoudtchild 'Test.Resources/postgres@2023-10-01-preview' = {
+  name: 'udttoudtchild'
   location: 'global'
   properties: {
     environment: udttoudtenv.id
