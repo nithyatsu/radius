@@ -116,6 +116,16 @@ func (src *EnvironmentResource) ConvertTo() (v1.DataModelInterface, error) {
 		converted.Properties.Extensions = extensions
 	}
 
+	if src.Properties.RecipePacks != nil {
+		recipePacks := make([]string, len(src.Properties.RecipePacks))
+		for i, rp := range src.Properties.RecipePacks {
+			if rp != nil {
+				recipePacks[i] = *rp
+			}
+		}
+		converted.Properties.RecipePacks = recipePacks
+	}
+
 	return converted, nil
 }
 
@@ -177,6 +187,14 @@ func (dst *EnvironmentResource) ConvertFrom(src v1.DataModelInterface) error {
 			extensions = append(extensions, fromEnvExtensionClassificationDataModel(e))
 		}
 		dst.Properties.Extensions = extensions
+	}
+
+	if env.Properties.RecipePacks != nil {
+		recipePacks := make([]*string, len(env.Properties.RecipePacks))
+		for i, rp := range env.Properties.RecipePacks {
+			recipePacks[i] = &rp
+		}
+		dst.Properties.RecipePacks = recipePacks
 	}
 
 	return nil
