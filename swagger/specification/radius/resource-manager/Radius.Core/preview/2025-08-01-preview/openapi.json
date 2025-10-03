@@ -302,6 +302,11 @@
             }
           }
         },
+        "x-ms-examples": {
+          "List recipe packs by scope": {
+            "$ref": "./examples/RecipePacks_ListByScope.json"
+          }
+        },
         "x-ms-pageable": {
           "nextLinkName": "nextLink"
         }
@@ -343,6 +348,11 @@
             "schema": {
               "$ref": "../../../../../common-types/resource-management/v3/types.json#/definitions/ErrorResponse"
             }
+          }
+        },
+        "x-ms-examples": {
+          "Get a recipe pack": {
+            "$ref": "./examples/RecipePacks_Get.json"
           }
         }
       },
@@ -396,6 +406,11 @@
             "schema": {
               "$ref": "../../../../../common-types/resource-management/v3/types.json#/definitions/ErrorResponse"
             }
+          }
+        },
+        "x-ms-examples": {
+          "Create or Update a recipe pack": {
+            "$ref": "./examples/RecipePacks_CreateOrUpdate.json"
           }
         }
       },
@@ -481,6 +496,11 @@
             "schema": {
               "$ref": "../../../../../common-types/resource-management/v3/types.json#/definitions/ErrorResponse"
             }
+          }
+        },
+        "x-ms-examples": {
+          "Delete a recipe pack": {
+            "$ref": "./examples/RecipePacks_Delete.json"
           }
         }
       }
