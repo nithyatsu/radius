@@ -32,7 +32,7 @@ using TypeSpec.Rest;
 namespace Radius.Core;
 
 @doc("The recipe pack resource")
-model RecipePackResource 
+model RecipePackResource
   is TrackedResourceRequired<RecipePackProperties, "recipePacks"> {
   @doc("recipe pack name")
   @key("recipePackName")
@@ -50,9 +50,9 @@ model RecipePackProperties {
   @doc("Description of what this recipe pack provides")
   description?: string;
 
-  @doc("List of environment IDs that reference this recipe pack") 
-  @visibility("read") 
-  referencedBy?: string[]; 
+  @doc("List of environment IDs that reference this recipe pack")
+  @visibility("read")
+  referencedBy?: string[];
 
   @doc("Map of resource types to their recipe configurations")
   recipes: Record<RecipeDefinition>;
@@ -81,7 +81,6 @@ enum RecipeKind {
   @doc("Bicep recipe")
   bicep: "bicep",
 }
-
 
 @armResourceOperations
 interface RecipePacks {
