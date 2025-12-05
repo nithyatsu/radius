@@ -27,6 +27,7 @@ import (
 	"github.com/radius-project/radius/pkg/cli/bicep"
 	"github.com/radius-project/radius/pkg/cli/clients"
 	"github.com/radius-project/radius/pkg/cli/clierrors"
+	"github.com/radius-project/radius/pkg/cli/cmd"
 	"github.com/radius-project/radius/pkg/cli/cmd/commonflags"
 	"github.com/radius-project/radius/pkg/cli/connections"
 	"github.com/radius-project/radius/pkg/cli/deploy"
@@ -35,7 +36,10 @@ import (
 	"github.com/radius-project/radius/pkg/cli/output"
 	"github.com/radius-project/radius/pkg/cli/workspaces"
 	"github.com/radius-project/radius/pkg/corerp/api/v20231001preview"
+	"github.com/radius-project/radius/pkg/corerp/api/v20250801preview"
+	corerpv20250801 "github.com/radius-project/radius/pkg/corerp/api/v20250801preview"
 	"github.com/radius-project/radius/pkg/to"
+	"github.com/radius-project/radius/pkg/ucp/resources"
 	"github.com/spf13/cobra"
 	"golang.org/x/exp/maps"
 )
@@ -122,11 +126,12 @@ rad deploy myapp.bicep --parameters @myfile.json --parameters version=latest
 
 // Runner is the runner implementation for the `rad deploy` command.
 type Runner struct {
-	Bicep             bicep.Interface
-	ConfigHolder      *framework.ConfigHolder
-	ConnectionFactory connections.Factory
-	Deploy            deploy.Interface
-	Output            output.Interface
+	Bicep                   bicep.Interface
+	ConfigHolder            *framework.ConfigHolder
+	ConnectionFactory       connections.Factory
+	RadiusCoreClientFactory *corerpv20250801.ClientFactory
+	Deploy                  deploy.Interface
+	Output                  output.Interface
 
 	ApplicationName     string
 	EnvironmentNameOrID string
@@ -181,63 +186,33 @@ func (r *Runner) Validate(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-
-	// Validate that the environment exists.
-	// Right now we assume that every deployment uses a Radius Environment.
-	client, err := r.ConnectionFactory.CreateApplicationsManagementClient(cmd.Context(), *r.Workspace)
-	if err != nil {
-		return err
-	}
-	env, err := client.GetEnvironment(cmd.Context(), r.EnvironmentNameOrID)
-	if err != nil {
-		// If the error is not a 404, return it
-		if !clients.Is404Error(err) {
-			return err
-		}
-
-		// If the environment doesn't exist, but the user specified its name or resource id as
-		// a command-line option, return an error
-		if cli.DidSpecifyEnvironmentName(cmd, args) {
-			return clierrors.Message("The environment %q does not exist in scope %q. Run `rad env create` first. You could also provide the environment ID if the environment exists in a different group.", r.EnvironmentNameOrID, r.Workspace.Scope)
-		}
-
-		// If we got here, it means that the error was a 404 and the user did not specify the environment name.
-		// This is fine, because an environment is not required.
-	}
-
 	r.Providers = &clients.Providers{}
 	r.Providers.Radius = &clients.RadiusProvider{}
-	if env.ID != nil {
-		r.Providers.Radius.EnvironmentID = *env.ID
-		r.Workspace.Environment = r.Providers.Radius.EnvironmentID
-	}
 
-	if r.ApplicationName != "" {
-		r.Providers.Radius.ApplicationID = r.Workspace.Scope + "/providers/applications.core/applications/" + r.ApplicationName
-	}
-
-	if env.Properties != nil && env.Properties.Providers != nil {
-		if env.Properties.Providers.Aws != nil {
-			r.Providers.AWS = &clients.AWSProvider{
-				Scope: *env.Properties.Providers.Aws.Scope,
-			}
+	isAppCoreEnv := r.determineEnvironmentProvider()
+	if isAppCoreEnv {
+		err = r.setupApplicationsCoreProviders(cmd.Context(), cmd, args)
+		if err != nil {
+			return err
 		}
-		if env.Properties.Providers.Azure != nil {
-			r.Providers.Azure = &clients.AzureProvider{
-				Scope: *env.Properties.Providers.Azure.Scope,
-			}
+	} else {
+		err = r.setupRadiusCoreProviders(cmd.Context(), cmd, args)
+		if err != nil {
+			return err
 		}
 	}
 
 	r.FilePath = args[0]
 
 	parameterArgs, err := cmd.Flags().GetStringArray("parameters")
+
 	if err != nil {
 		return err
 	}
 
 	parser := bicep.ParameterParser{FileSystem: filesystem.NewOSFS()}
 	r.Parameters, err = parser.Parse(parameterArgs...)
+
 	if err != nil {
 		return err
 	}
@@ -396,4 +371,181 @@ func (r *Runner) reportMissingParameters(template map[string]any) error {
 	}
 
 	return clierrors.Message("The template %q could not be deployed because of the following errors:\n\n%v", r.FilePath, strings.Join(details, "\n"))
+}
+
+// setupApplicationsCoreProviders validates and configures providers for Applications Core environment
+func (r *Runner) setupApplicationsCoreProviders(ctx context.Context, cmd *cobra.Command, args []string) error {
+	// Validate that the environment exists.
+	env, err := r.getApplicationsCoreEnvironment(ctx, cmd, args)
+	if err != nil {
+		return err
+	}
+
+	if env != nil {
+		r.setupEnvironmentID(env.ID)
+		r.setupCloudProviders(env.Properties)
+	}
+
+	if r.ApplicationName != "" {
+		r.Providers.Radius.ApplicationID = r.Workspace.Scope + "/providers/applications.core/applications/" + r.ApplicationName
+	}
+
+	return nil
+}
+
+// setupRadiusCoreProviders validates and configures providers for Radius Core environment
+func (r *Runner) setupRadiusCoreProviders(ctx context.Context, cmd *cobra.Command, args []string) error {
+	// Validate that the environment exists.
+	env, err := r.getRadiusCoreEnvironment(ctx, cmd, args)
+	if err != nil {
+		return err
+	}
+
+	if env != nil {
+		r.setupEnvironmentID(env.ID)
+		r.setupCloudProviders(env.Properties)
+	}
+
+	if r.ApplicationName != "" {
+		r.Providers.Radius.ApplicationID = r.Workspace.Scope + "/providers/radius.core/applications/" + r.ApplicationName
+	}
+
+	return nil
+}
+
+// handleEnvironmentError handles common error patterns for environment retrieval
+func (r *Runner) handleEnvironmentError(err error, command *cobra.Command, args []string) error {
+	// If the error is not a 404, return it
+	if !clients.Is404Error(err) {
+		return err
+	}
+
+	// If the environment doesn't exist, but the user specified its name or resource id as
+	// a command-line option, return an error
+	if cli.DidSpecifyEnvironmentName(command, args) {
+		return clierrors.Message("The environment %q does not exist in scope %q. Run `rad env create` first. You could also provide the environment ID if the environment exists in a different group.", r.EnvironmentNameOrID, r.Workspace.Scope)
+	}
+
+	// If we got here, it means that the error was a 404 and the user did not specify the environment name.
+	// This is fine, because an environment is not required.
+	return nil
+}
+
+// handleEnvironmentErrorWithNilReturn handles environment errors and returns nil on 404 with no specification
+func (r *Runner) handleEnvironmentErrorWithNilReturn(err error, command *cobra.Command, args []string) (bool, error) {
+	handleErr := r.handleEnvironmentError(err, command, args)
+	if handleErr != nil {
+		return false, handleErr
+	}
+	// Return true to indicate we should return nil (environment not found but that's ok)
+	return true, nil
+}
+
+// setupEnvironmentID sets up the environment ID and workspace environment
+func (r *Runner) setupEnvironmentID(envID *string) {
+	if envID != nil {
+		r.Providers.Radius.EnvironmentID = *envID
+		r.Workspace.Environment = r.Providers.Radius.EnvironmentID
+	}
+}
+
+// setupCloudProviders sets up AWS and Azure providers based on environment properties
+func (r *Runner) setupCloudProviders(properties interface{}) {
+	switch props := properties.(type) {
+	case *v20231001preview.EnvironmentProperties:
+		if props != nil && props.Providers != nil {
+			if props.Providers.Aws != nil {
+				r.Providers.AWS = &clients.AWSProvider{
+					Scope: *props.Providers.Aws.Scope,
+				}
+			}
+			if props.Providers.Azure != nil {
+				r.Providers.Azure = &clients.AzureProvider{
+					Scope: *props.Providers.Azure.Scope,
+				}
+			}
+		}
+	case *v20250801preview.EnvironmentProperties:
+		if props != nil && props.Providers != nil {
+			if props.Providers.Aws != nil {
+				r.Providers.AWS = &clients.AWSProvider{
+					Scope: *props.Providers.Aws.Scope,
+				}
+			}
+			if props.Providers.Azure != nil {
+				r.Providers.Azure = &clients.AzureProvider{
+					Scope: "/planes/azure/azure/" + "Subscriptions/" + *props.Providers.Azure.SubscriptionID + "/ResourceGroups/" + *props.Providers.Azure.ResourceGroupName,
+				}
+			}
+		}
+	}
+}
+
+// determineEnvironmentProvider determines which provider to use based on the environment ID
+func (r *Runner) determineEnvironmentProvider() bool {
+	useApplicationsCoreEnv := true
+
+	// Check if EnvironmentNameOrID is an ID and parse it
+	parsedID, parseErr := resources.Parse(r.EnvironmentNameOrID)
+	if parseErr == nil {
+		// Use ProviderNamespace() to check the provider namespace
+		providerNamespace := parsedID.ProviderNamespace()
+		if strings.EqualFold(providerNamespace, "Applications.Core") {
+			useApplicationsCoreEnv = true
+		} else if strings.EqualFold(providerNamespace, "Radius.Core") {
+			useApplicationsCoreEnv = false
+		}
+	}
+
+	return useApplicationsCoreEnv
+}
+
+// getApplicationsCoreEnvironment retrieves environment using Applications Core client
+func (r *Runner) getApplicationsCoreEnvironment(ctx context.Context, command *cobra.Command, args []string) (*v20231001preview.EnvironmentResource, error) {
+	client, err := r.ConnectionFactory.CreateApplicationsManagementClient(ctx, *r.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	env, err := client.GetEnvironment(ctx, r.EnvironmentNameOrID)
+	if err != nil {
+		shouldReturnNil, handleErr := r.handleEnvironmentErrorWithNilReturn(err, command, args)
+		if handleErr != nil {
+			return nil, handleErr
+		}
+		if shouldReturnNil {
+			return nil, nil
+		}
+	}
+	return &env, nil
+}
+
+// getRadiusCoreEnvironment retrieves environment using Radius Core client and returns as Applications.Core format
+func (r *Runner) getRadiusCoreEnvironment(ctx context.Context, command *cobra.Command, args []string) (*v20250801preview.EnvironmentResource, error) {
+	if r.RadiusCoreClientFactory == nil {
+		clientFactory, err := cmd.InitializeRadiusCoreClientFactory(ctx, r.Workspace, r.Workspace.Scope)
+		if err != nil {
+			return nil, err
+		}
+		r.RadiusCoreClientFactory = clientFactory
+	}
+
+	environmentClient := r.RadiusCoreClientFactory.NewEnvironmentsClient()
+	// If ID, parse and get the name.
+	envName := r.EnvironmentNameOrID
+	parsedID, err := resources.Parse(r.EnvironmentNameOrID)
+	if err == nil {
+		envName = parsedID.Name()
+	}
+	env, err := environmentClient.Get(ctx, envName, nil)
+	if err != nil {
+		shouldReturnNil, handleErr := r.handleEnvironmentErrorWithNilReturn(err, command, args)
+		if handleErr != nil {
+			return nil, handleErr
+		}
+		if shouldReturnNil {
+			return nil, nil
+		}
+	}
+
+	return &env.EnvironmentResource, nil
 }
