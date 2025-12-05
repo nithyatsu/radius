@@ -139,6 +139,7 @@ type Runner struct {
 	Parameters          map[string]map[string]any
 	Workspace           *workspaces.Workspace
 	Providers           *clients.Providers
+	EnvCheckResult      *EnvironmentCheckResult
 }
 
 // NewRunner creates a new instance of the `rad deploy` runner.
@@ -189,16 +190,50 @@ func (r *Runner) Validate(cmd *cobra.Command, args []string) error {
 	r.Providers = &clients.Providers{}
 	r.Providers.Radius = &clients.RadiusProvider{}
 
-	isAppCoreEnv := r.determineEnvironmentProvider()
-	if isAppCoreEnv {
-		err = r.setupApplicationsCoreProviders(cmd.Context(), cmd, args)
+	// Check if EnvironmentNameOrID is an ID (contains '/') or a name
+	_, parseErr := resources.Parse(r.EnvironmentNameOrID)
+	if parseErr != nil {
+		// It's a name, not an ID - check both providers
+		checkResult, err := r.CheckEnvironmentExistence(cmd.Context(), r.EnvironmentNameOrID, cmd, args)
 		if err != nil {
 			return err
 		}
+		
+		// If no environment found and user didn't specify environment name, that's ok
+		if checkResult == nil {
+			if cli.DidSpecifyEnvironmentName(cmd, args) {
+				return clierrors.Message("The environment %q does not exist in scope %q. Run `rad env create` first. You could also provide the environment ID if the environment exists in a different group.", r.EnvironmentNameOrID, r.Workspace.Scope)
+			}
+			// Environment not required, continue without setting up providers
+			return nil
+		}
+		
+		r.EnvCheckResult = checkResult
+		
+		if checkResult.UseApplicationsCore {
+			err = r.setupApplicationsCoreProvidersWithCache(cmd.Context(), cmd, args)
+			if err != nil {
+				return err
+			}
+		} else {
+			err = r.setupRadiusCoreProvidersWithCache(cmd.Context(), cmd, args)
+			if err != nil {
+				return err
+			}
+		}
 	} else {
-		err = r.setupRadiusCoreProviders(cmd.Context(), cmd, args)
-		if err != nil {
-			return err
+		// It's an ID - use the existing logic
+		isAppCoreEnv := r.determineEnvironmentProvider()
+		if isAppCoreEnv {
+			err = r.setupApplicationsCoreProviders(cmd.Context(), cmd, args)
+			if err != nil {
+				return err
+			}
+		} else {
+			err = r.setupRadiusCoreProviders(cmd.Context(), cmd, args)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -548,4 +583,139 @@ func (r *Runner) getRadiusCoreEnvironment(ctx context.Context, command *cobra.Co
 	}
 
 	return &env.EnvironmentResource, nil
+}
+
+// ConstructApplicationsCoreEnvironmentID constructs an Applications.Core environment ID from a name
+func (r *Runner) ConstructApplicationsCoreEnvironmentID(envName string) string {
+	return r.Workspace.Scope + "/providers/Applications.Core/environments/" + envName
+}
+
+// ConstructRadiusCoreEnvironmentID constructs a Radius.Core environment ID from a name
+func (r *Runner) ConstructRadiusCoreEnvironmentID(envName string) string {
+	return r.Workspace.Scope + "/providers/Radius.Core/environments/" + envName
+}
+
+// EnvironmentCheckResult holds the result of checking for environments
+type EnvironmentCheckResult struct {
+	UseApplicationsCore bool
+	ApplicationsCoreEnv *v20231001preview.EnvironmentResource
+	RadiusCoreEnv       *v20250801preview.EnvironmentResource
+}
+
+// CheckEnvironmentExistence checks both Applications.Core and Radius.Core environments for a given name
+func (r *Runner) CheckEnvironmentExistence(ctx context.Context, envName string, command *cobra.Command, args []string) (*EnvironmentCheckResult, error) {
+	result := &EnvironmentCheckResult{}
+
+	// Check Applications.Core environment
+	appCoreEnvID := r.ConstructApplicationsCoreEnvironmentID(envName)
+	tempRunner := &Runner{
+		EnvironmentNameOrID: appCoreEnvID,
+		Workspace:           r.Workspace,
+		ConnectionFactory:   r.ConnectionFactory,
+	}
+	appCoreEnv, err := tempRunner.getApplicationsCoreEnvironment(ctx, command, args)
+	if err != nil {
+		// Only return error if it's not a 404 and not a case where environment was not specified
+		if !clients.Is404Error(err) {
+			return nil, err
+		}
+	}
+	if appCoreEnv != nil {
+		result.ApplicationsCoreEnv = appCoreEnv
+	}
+
+	// Check Radius.Core environment
+	radiusCoreEnvID := r.ConstructRadiusCoreEnvironmentID(envName)
+	tempRadiusRunner := &Runner{
+		EnvironmentNameOrID:     radiusCoreEnvID,
+		Workspace:               r.Workspace,
+		RadiusCoreClientFactory: r.RadiusCoreClientFactory,
+	}
+	
+	// Initialize RadiusCoreClientFactory if needed
+	if tempRadiusRunner.RadiusCoreClientFactory == nil {
+		clientFactory, err := cmd.InitializeRadiusCoreClientFactory(ctx, r.Workspace, r.Workspace.Scope)
+		if err != nil {
+			// If we can't initialize the client, we'll assume Radius.Core is not available
+			// but we won't fail the whole operation
+		} else {
+			tempRadiusRunner.RadiusCoreClientFactory = clientFactory
+		}
+	}
+
+	if tempRadiusRunner.RadiusCoreClientFactory != nil {
+		radiusCoreEnv, err := tempRadiusRunner.getRadiusCoreEnvironment(ctx, command, args)
+		if err != nil {
+			// In dual-check mode, we want to be more lenient - if Radius.Core fails, we'll just
+			// treat it as not found and continue. We only care about actual conflicts.
+			// Don't fail the entire operation if Radius.Core has issues
+		}
+		if radiusCoreEnv != nil {
+			result.RadiusCoreEnv = radiusCoreEnv
+		}
+	}
+
+	// Determine which one to use and check for conflicts
+	if result.ApplicationsCoreEnv != nil && result.RadiusCoreEnv != nil {
+		return nil, clierrors.Message("Conflict detected: Environment '%s' exists in both Applications.Core and Radius.Core providers. Please specify the full resource ID to disambiguate:\n  Applications.Core: %s\n  Radius.Core: %s", 
+			envName, appCoreEnvID, radiusCoreEnvID)
+	}
+
+	if result.ApplicationsCoreEnv != nil {
+		result.UseApplicationsCore = true
+		r.EnvironmentNameOrID = appCoreEnvID
+	} else if result.RadiusCoreEnv != nil {
+		result.UseApplicationsCore = false
+		r.EnvironmentNameOrID = radiusCoreEnvID
+		r.RadiusCoreClientFactory = tempRadiusRunner.RadiusCoreClientFactory
+	} else {
+		// Neither found, treat as environment not found case
+		return nil, nil
+	}
+
+	return result, nil
+}
+
+// setupApplicationsCoreProvidersWithCache validates and configures providers for Applications Core environment using cached env
+func (r *Runner) setupApplicationsCoreProvidersWithCache(ctx context.Context, cmd *cobra.Command, args []string) error {
+	_ = ctx
+	_ = cmd
+	_ = args
+	var env *v20231001preview.EnvironmentResource
+	if r.EnvCheckResult != nil && r.EnvCheckResult.ApplicationsCoreEnv != nil {
+		env = r.EnvCheckResult.ApplicationsCoreEnv
+	}
+
+	if env != nil {
+		r.setupEnvironmentID(env.ID)
+		r.setupCloudProviders(env.Properties)
+	}
+
+	if r.ApplicationName != "" {
+		r.Providers.Radius.ApplicationID = r.Workspace.Scope + "/providers/applications.core/applications/" + r.ApplicationName
+	}
+
+	return nil
+}
+
+// setupRadiusCoreProvidersWithCache validates and configures providers for Radius Core environment using cached env
+func (r *Runner) setupRadiusCoreProvidersWithCache(ctx context.Context, cmd *cobra.Command, args []string) error {
+	_ = ctx
+	_ = cmd
+	_ = args
+	var env *v20250801preview.EnvironmentResource
+	if r.EnvCheckResult != nil && r.EnvCheckResult.RadiusCoreEnv != nil {
+		env = r.EnvCheckResult.RadiusCoreEnv
+	}
+
+	if env != nil {
+		r.setupEnvironmentID(env.ID)
+		r.setupCloudProviders(env.Properties)
+	}
+
+	if r.ApplicationName != "" {
+		r.Providers.Radius.ApplicationID = r.Workspace.Scope + "/providers/radius.core/applications/" + r.ApplicationName
+	}
+
+	return nil
 }
