@@ -28,10 +28,10 @@ import (
 	"github.com/radius-project/radius/pkg/cli/deploy"
 	"github.com/radius-project/radius/pkg/cli/framework"
 	"github.com/radius-project/radius/pkg/cli/output"
+	"github.com/radius-project/radius/pkg/cli/test_client_factory"
 	"github.com/radius-project/radius/pkg/cli/workspaces"
 	"github.com/radius-project/radius/pkg/corerp/api/v20231001preview"
 	"github.com/radius-project/radius/pkg/corerp/api/v20250801preview"
-	"github.com/radius-project/radius/pkg/cli/test_client_factory"
 	"github.com/radius-project/radius/pkg/to"
 	"github.com/radius-project/radius/test/radcli"
 	"github.com/spf13/cobra"
@@ -87,7 +87,7 @@ func Test_Validate(t *testing.T) {
 				Config:         configWithWorkspace,
 			},
 			ConfigureMocks: func(mocks radcli.ValidateMocks) {
-				// Since environment name "prod" will trigger dual-check logic, 
+				// Since environment name "prod" will trigger dual-check logic,
 				// it will first try the full Applications.Core path
 				mocks.ApplicationManagementClient.EXPECT().
 					GetEnvironment(gomock.Any(), "/planes/radius/local/resourceGroups/test-resource-group/providers/Applications.Core/environments/prod").
@@ -114,7 +114,7 @@ func Test_Validate(t *testing.T) {
 				Config:         configWithWorkspace,
 			},
 			ConfigureMocks: func(mocks radcli.ValidateMocks) {
-				// Since environment name "prod" will trigger dual-check logic, 
+				// Since environment name "prod" will trigger dual-check logic,
 				// it will first try the full Applications.Core path and fail
 				mocks.ApplicationManagementClient.EXPECT().
 					GetEnvironment(gomock.Any(), "/planes/radius/local/resourceGroups/test-resource-group/providers/Applications.Core/environments/prod").
@@ -156,7 +156,7 @@ func Test_Validate(t *testing.T) {
 				Config:         configWithWorkspace,
 			},
 			ConfigureMocks: func(mocks radcli.ValidateMocks) {
-				// Since environment name "prod" will trigger dual-check logic, 
+				// Since environment name "prod" will trigger dual-check logic,
 				// it will first try the full Applications.Core path
 				mocks.ApplicationManagementClient.EXPECT().
 					GetEnvironment(gomock.Any(), "/planes/radius/local/resourceGroups/test-resource-group/providers/Applications.Core/environments/prod").
@@ -189,7 +189,7 @@ func Test_Validate(t *testing.T) {
 				},
 			},
 			ConfigureMocks: func(mocks radcli.ValidateMocks) {
-				// Since environment name "prod" will trigger dual-check logic, 
+				// Since environment name "prod" will trigger dual-check logic,
 				// it will first try the full Applications.Core path
 				mocks.ApplicationManagementClient.EXPECT().
 					GetEnvironment(gomock.Any(), "/planes/radius/local/resourceGroups/test-resource-group/providers/Applications.Core/environments/prod").
@@ -208,7 +208,7 @@ func Test_Validate(t *testing.T) {
 				Config:         radcli.LoadEmptyConfig(t),
 			},
 			ConfigureMocks: func(mocks radcli.ValidateMocks) {
-				// Since environment name "prod" will trigger dual-check logic, 
+				// Since environment name "prod" will trigger dual-check logic,
 				// it will first try the full Applications.Core path with my-group scope
 				mocks.ApplicationManagementClient.EXPECT().
 					GetEnvironment(gomock.Any(), "/planes/radius/local/resourceGroups/my-group/providers/Applications.Core/environments/prod").
@@ -385,7 +385,8 @@ func Test_Run(t *testing.T) {
 				"kind":    "kubernetes",
 				"context": "kind-kind",
 			},
-			Name: "kind-kind",
+			Name:        "kind-kind",
+			Environment: fmt.Sprintf("/planes/radius/local/resourceGroups/%s/providers/applications.core/environments/%s", radcli.TestEnvironmentName, radcli.TestEnvironmentName),
 		}
 		ProviderConfig := clients.Providers{
 			AWS: &clients.AWSProvider{
@@ -458,10 +459,6 @@ func Test_Run(t *testing.T) {
 
 		appManagmentMock := clients.NewMockApplicationsManagementClient(ctrl)
 		appManagmentMock.EXPECT().
-			GetEnvironment(gomock.Any(), radcli.TestEnvironmentName).
-			Return(v20231001preview.EnvironmentResource{}, nil).
-			Times(1)
-		appManagmentMock.EXPECT().
 			CreateApplicationIfNotFound(gomock.Any(), "test-application", gomock.Any()).
 			Return(nil).
 			Times(1)
@@ -481,7 +478,8 @@ func Test_Run(t *testing.T) {
 				"kind":    "kubernetes",
 				"context": "kind-kind",
 			},
-			Name: "kind-kind",
+			Name:        "kind-kind",
+			Environment: fmt.Sprintf("/planes/radius/local/resourceGroups/%s/providers/applications.core/environments/%s", radcli.TestEnvironmentName, radcli.TestEnvironmentName),
 		}
 		outputSink := &output.MockOutput{}
 		providers := clients.Providers{
@@ -528,12 +526,6 @@ func Test_Run(t *testing.T) {
 
 		appManagmentMock := clients.NewMockApplicationsManagementClient(ctrl)
 
-		// GetEnvironment returns a 404 error
-		appManagmentMock.EXPECT().
-			GetEnvironment(gomock.Any(), "envdoesntexist").
-			Return(v20231001preview.EnvironmentResource{}, radcli.Create404Error()).
-			Times(1)
-
 		deployMock := deploy.NewMockInterface(ctrl)
 		deployMock.EXPECT().
 			DeployWithProgress(gomock.Any(), gomock.Any()).
@@ -554,7 +546,7 @@ func Test_Run(t *testing.T) {
 		providers := clients.Providers{
 			Radius: &clients.RadiusProvider{
 				EnvironmentID: fmt.Sprintf("/planes/radius/local/resourceGroups/%s/providers/applications.core/environments/%s", radcli.TestEnvironmentName, radcli.TestEnvironmentName),
-				ApplicationID: fmt.Sprintf("/planes/radius/local/resourceGroups/%s/providers/applications.core/environments/%s/applications/test-application", radcli.TestEnvironmentName, radcli.TestEnvironmentName),
+				ApplicationID: fmt.Sprintf("/planes/radius/local/resourceGroups/%s/providers/applications.core/applications/test-application", radcli.TestEnvironmentName),
 			},
 		}
 
@@ -569,11 +561,12 @@ func Test_Run(t *testing.T) {
 			EnvironmentNameOrID: "envdoesntexist",
 			Parameters:          map[string]map[string]any{},
 			Workspace:           workspace,
+			EnvCheckResult:      nil,
 		}
 
 		err := runner.Run(context.Background())
 
-		// Even though GetEnvironment returns a 404 error, the deployment should still succeed
+		// Even though GetEnvironment returns a 404 error (indicated by EnvCheckResult being nil), the deployment should still succeed
 		require.NoError(t, err)
 
 		// All of the output in this command is being done by functions that we mock for testing, so this
@@ -768,16 +761,6 @@ func Test_determineEnvironmentProvider(t *testing.T) {
 			environmentName: "/planes/radius/local/resourceGroups/test/providers/radius.core/environments/env1",
 			expected:        false,
 		},
-		{
-			name:            "Simple environment name (defaults to Applications.Core)",
-			environmentName: "myenv",
-			expected:        true,
-		},
-		{
-			name:            "Invalid resource ID (defaults to Applications.Core)",
-			environmentName: "invalid-resource-id",
-			expected:        true,
-		},
 	}
 
 	for _, tc := range testcases {
@@ -793,8 +776,8 @@ func Test_determineEnvironmentProvider(t *testing.T) {
 
 func Test_setupEnvironmentID(t *testing.T) {
 	testcases := []struct {
-		name               string
-		envID              *string
+		name                  string
+		envID                 *string
 		expectedEnvironmentID string
 		expectedWorkspaceEnv  string
 	}{
@@ -820,9 +803,9 @@ func Test_setupEnvironmentID(t *testing.T) {
 				},
 				Workspace: &workspaces.Workspace{},
 			}
-			
+
 			runner.setupEnvironmentID(tc.envID)
-			
+
 			require.Equal(t, tc.expectedEnvironmentID, runner.Providers.Radius.EnvironmentID)
 			require.Equal(t, tc.expectedWorkspaceEnv, runner.Workspace.Environment)
 		})
@@ -831,73 +814,16 @@ func Test_setupEnvironmentID(t *testing.T) {
 
 func Test_setupCloudProviders(t *testing.T) {
 	testcases := []struct {
-		name                string
-		properties          interface{}
-		expectedAWS         *clients.AWSProvider
-		expectedAzure       *clients.AzureProvider
+		name          string
+		properties    interface{}
+		expectedAWS   *clients.AWSProvider
+		expectedAzure *clients.AzureProvider
 	}{
 		{
-			name:                "Nil properties",
-			properties:          nil,
-			expectedAWS:         nil,
-			expectedAzure:       nil,
-		},
-		{
-			name: "v20231001preview with AWS provider",
-			properties: &v20231001preview.EnvironmentProperties{
-				Providers: &v20231001preview.Providers{
-					Aws: &v20231001preview.ProvidersAws{
-						Scope: to.Ptr("test-aws-scope"),
-					},
-				},
-			},
-			expectedAWS: &clients.AWSProvider{
-				Scope: "test-aws-scope",
-			},
+			name:          "Nil properties",
+			properties:    nil,
+			expectedAWS:   nil,
 			expectedAzure: nil,
-		},
-		{
-			name: "v20231001preview with Azure provider",
-			properties: &v20231001preview.EnvironmentProperties{
-				Providers: &v20231001preview.Providers{
-					Azure: &v20231001preview.ProvidersAzure{
-						Scope: to.Ptr("test-azure-scope"),
-					},
-				},
-			},
-			expectedAWS: nil,
-			expectedAzure: &clients.AzureProvider{
-				Scope: "test-azure-scope",
-			},
-		},
-		{
-			name: "v20250801preview with AWS provider",
-			properties: &v20250801preview.EnvironmentProperties{
-				Providers: &v20250801preview.Providers{
-					Aws: &v20250801preview.ProvidersAws{
-						Scope: to.Ptr("test-aws-scope-v2"),
-					},
-				},
-			},
-			expectedAWS: &clients.AWSProvider{
-				Scope: "test-aws-scope-v2",
-			},
-			expectedAzure: nil,
-		},
-		{
-			name: "v20250801preview with Azure provider",
-			properties: &v20250801preview.EnvironmentProperties{
-				Providers: &v20250801preview.Providers{
-					Azure: &v20250801preview.ProvidersAzure{
-						SubscriptionID:    to.Ptr("test-subscription"),
-						ResourceGroupName: to.Ptr("test-rg"),
-					},
-				},
-			},
-			expectedAWS: nil,
-			expectedAzure: &clients.AzureProvider{
-				Scope: "/planes/azure/azure/Subscriptions/test-subscription/ResourceGroups/test-rg",
-			},
 		},
 		{
 			name: "v20231001preview with both providers",
@@ -923,7 +849,7 @@ func Test_setupCloudProviders(t *testing.T) {
 			properties: &v20250801preview.EnvironmentProperties{
 				Providers: &v20250801preview.Providers{
 					Aws: &v20250801preview.ProvidersAws{
-						Scope: to.Ptr("test-aws-scope-v2"),
+						Scope: to.Ptr("/planes/aws/aws/account/account-id/regions/us-west-2"),
 					},
 					Azure: &v20250801preview.ProvidersAzure{
 						SubscriptionID:    to.Ptr("test-subscription"),
@@ -932,7 +858,7 @@ func Test_setupCloudProviders(t *testing.T) {
 				},
 			},
 			expectedAWS: &clients.AWSProvider{
-				Scope: "test-aws-scope-v2",
+				Scope: "/planes/aws/aws/account/account-id/regions/us-west-2",
 			},
 			expectedAzure: &clients.AzureProvider{
 				Scope: "/planes/azure/azure/Subscriptions/test-subscription/ResourceGroups/test-rg",
@@ -945,9 +871,9 @@ func Test_setupCloudProviders(t *testing.T) {
 			runner := &Runner{
 				Providers: &clients.Providers{},
 			}
-			
+
 			runner.setupCloudProviders(tc.properties)
-			
+
 			require.Equal(t, tc.expectedAWS, runner.Providers.AWS)
 			require.Equal(t, tc.expectedAzure, runner.Providers.Azure)
 		})
@@ -956,12 +882,12 @@ func Test_setupCloudProviders(t *testing.T) {
 
 func Test_handleEnvironmentError(t *testing.T) {
 	testcases := []struct {
-		name           string
-		err            error
-		command        *cobra.Command
-		args           []string
-		expectedError  string
-		shouldError    bool
+		name          string
+		err           error
+		command       *cobra.Command
+		args          []string
+		expectedError string
+		shouldError   bool
 	}{
 		{
 			name:          "Non-404 error",
@@ -996,9 +922,9 @@ func Test_handleEnvironmentError(t *testing.T) {
 					Scope: "/planes/radius/local/resourceGroups/test-resource-group",
 				},
 			}
-			
+
 			err := runner.handleEnvironmentError(tc.err, tc.command, tc.args)
-			
+
 			if tc.shouldError {
 				require.Error(t, err)
 				require.Contains(t, err.Error(), tc.expectedError)
@@ -1011,13 +937,13 @@ func Test_handleEnvironmentError(t *testing.T) {
 
 func Test_handleEnvironmentErrorWithNilReturn(t *testing.T) {
 	testcases := []struct {
-		name                string
-		err                 error
-		command             *cobra.Command
-		args                []string
+		name                 string
+		err                  error
+		command              *cobra.Command
+		args                 []string
 		expectedShouldReturn bool
-		expectedError       string
-		shouldError         bool
+		expectedError        string
+		shouldError          bool
 	}{
 		{
 			name:                 "Non-404 error",
@@ -1055,9 +981,9 @@ func Test_handleEnvironmentErrorWithNilReturn(t *testing.T) {
 					Scope: "/planes/radius/local/resourceGroups/test-resource-group",
 				},
 			}
-			
+
 			shouldReturn, err := runner.handleEnvironmentErrorWithNilReturn(tc.err, tc.command, tc.args)
-			
+
 			require.Equal(t, tc.expectedShouldReturn, shouldReturn)
 			if tc.shouldError {
 				require.Error(t, err)
@@ -1071,13 +997,13 @@ func Test_handleEnvironmentErrorWithNilReturn(t *testing.T) {
 
 func Test_getApplicationsCoreEnvironment(t *testing.T) {
 	testcases := []struct {
-		name           string
-		setupMocks     func(client *clients.MockApplicationsManagementClient)
-		command        *cobra.Command
-		args           []string
-		expectedEnv    *v20231001preview.EnvironmentResource
-		expectedError  string
-		shouldError    bool
+		name          string
+		setupMocks    func(client *clients.MockApplicationsManagementClient)
+		command       *cobra.Command
+		args          []string
+		expectedEnv   *v20231001preview.EnvironmentResource
+		expectedError string
+		shouldError   bool
 	}{
 		{
 			name: "Successfully get environment",
@@ -1169,13 +1095,13 @@ func Test_getApplicationsCoreEnvironment(t *testing.T) {
 
 func Test_getRadiusCoreEnvironment(t *testing.T) {
 	testcases := []struct {
-		name           string
+		name            string
 		environmentName string
-		command        *cobra.Command
-		args           []string
-		expectedEnv    *v20250801preview.EnvironmentResource
-		expectedError  string
-		shouldError    bool
+		command         *cobra.Command
+		args            []string
+		expectedEnv     *v20250801preview.EnvironmentResource
+		expectedError   string
+		shouldError     bool
 	}{
 		{
 			name:            "Successfully get environment by name",
@@ -1204,7 +1130,7 @@ func Test_getRadiusCoreEnvironment(t *testing.T) {
 			scope := "/planes/radius/local/resourceGroups/test-resource-group"
 			factory, err := test_client_factory.NewRadiusCoreTestClientFactory(scope, test_client_factory.WithEnvironmentServerNoError, nil)
 			require.NoError(t, err)
-			
+
 			runner := &Runner{
 				EnvironmentNameOrID:     tc.environmentName,
 				RadiusCoreClientFactory: factory,
@@ -1390,7 +1316,7 @@ func Test_constructApplicationsCoreEnvironmentID(t *testing.T) {
 			Scope: "/planes/radius/local/resourceGroups/test-rg",
 		},
 	}
-	
+
 	result := runner.ConstructApplicationsCoreEnvironmentID("myenv")
 	expected := "/planes/radius/local/resourceGroups/test-rg/providers/Applications.Core/environments/myenv"
 	require.Equal(t, expected, result)
@@ -1402,7 +1328,7 @@ func Test_constructRadiusCoreEnvironmentID(t *testing.T) {
 			Scope: "/planes/radius/local/resourceGroups/test-rg",
 		},
 	}
-	
+
 	result := runner.ConstructRadiusCoreEnvironmentID("myenv")
 	expected := "/planes/radius/local/resourceGroups/test-rg/providers/Radius.Core/environments/myenv"
 	require.Equal(t, expected, result)
@@ -1410,13 +1336,13 @@ func Test_constructRadiusCoreEnvironmentID(t *testing.T) {
 
 func Test_checkEnvironmentExistence(t *testing.T) {
 	testcases := []struct {
-		name                    string
-		envName                 string
-		setupApplicationsCore   func(*clients.MockApplicationsManagementClient)
-		setupRadiusCore         bool
-		expectedResult          *EnvironmentCheckResult
-		expectedError           string
-		shouldError             bool
+		name                  string
+		envName               string
+		setupApplicationsCore func(*clients.MockApplicationsManagementClient)
+		setupRadiusCore       bool
+		expectedResult        *EnvironmentCheckResult
+		expectedError         string
+		shouldError           bool
 	}{
 		{
 			name:    "Applications.Core environment found only",
@@ -1443,9 +1369,9 @@ func Test_checkEnvironmentExistence(t *testing.T) {
 			setupApplicationsCore: func(client *clients.MockApplicationsManagementClient) {
 				client.EXPECT().GetEnvironment(gomock.Any(), "/planes/radius/local/resourceGroups/test-rg/providers/Applications.Core/environments/nonexistent").Return(v20231001preview.EnvironmentResource{}, radcli.Create404Error()).Times(1)
 			},
-			setupRadiusCore:    false,
-			expectedResult:     nil, // Now returns nil instead of default behavior
-			shouldError:        false,
+			setupRadiusCore: false,
+			expectedResult:  nil, // Now returns nil instead of default behavior
+			shouldError:     false,
 		},
 		{
 			name:    "Both environments found - should return conflict error",
