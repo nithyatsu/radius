@@ -197,7 +197,8 @@ func (r *Runner) Validate(cmd *cobra.Command, args []string) error {
 
 	_, parseErr := resources.Parse(r.EnvironmentNameOrID)
 	if parseErr != nil {
-		// Treat it as aname name, not an ID - check both providers
+		envName := r.EnvironmentNameOrID
+		// Treat it as name, not an ID - check both providers
 		checkResult, err := r.CheckEnvironmentExistence(cmd.Context(), r.EnvironmentNameOrID, cmd, args)
 		if err != nil {
 			return err
@@ -206,7 +207,7 @@ func (r *Runner) Validate(cmd *cobra.Command, args []string) error {
 		// If no environment found and user didn't specify environment name, that's ok
 		if checkResult == nil {
 			if cli.DidSpecifyEnvironmentName(cmd, args) {
-				return clierrors.Message("The environment %q does not exist in scope %q. Run `rad env create` first. You could also provide the environment ID if the environment exists in a different group.", r.EnvironmentNameOrID, r.Workspace.Scope)
+				return clierrors.Message("The environment %q does not exist in scope %q. Run `rad env create` first. You could also provide the environment ID if the environment exists in a different group.", envName, r.Workspace.Scope)
 			}
 			// Environment not required, continue without setting up providers
 			return nil
@@ -469,7 +470,7 @@ func (r *Runner) handleEnvironmentError(err error, command *cobra.Command, args 
 	// If the environment doesn't exist, but the user specified its name or resource id as
 	// a command-line option, return an error
 	if cli.DidSpecifyEnvironmentName(command, args) {
-		return clierrors.Message("The environment %q does not exist in scope %q. Run `rad env create` first. You could also provide the environment ID if the environment exists in a different group.", r.EnvironmentNameOrID, r.Workspace.Scope)
+		return clierrors.Message("The environment %q does not exist in scope %q. Run `rad env create` first. You could also provide the environment ID if the environment exists in a different group.", r, r.Workspace.Scope)
 	}
 
 	// If we got here, it means that the error was a 404 and the user did not specify the environment name.
@@ -503,13 +504,7 @@ func (r *Runner) getApplicationsCoreEnvironment(ctx context.Context, command *co
 	}
 	env, err := client.GetEnvironment(ctx, r.EnvironmentNameOrID)
 	if err != nil {
-		shouldReturnNil, handleErr := r.handleEnvironmentErrorWithNilReturn(err, command, args)
-		if handleErr != nil {
-			return nil, handleErr
-		}
-		if shouldReturnNil {
-			return nil, nil
-		}
+		return nil, err
 	}
 	return &env, nil
 }
@@ -533,13 +528,7 @@ func (r *Runner) getRadiusCoreEnvironment(ctx context.Context, command *cobra.Co
 	}
 	env, err := environmentClient.Get(ctx, envName, nil)
 	if err != nil {
-		shouldReturnNil, handleErr := r.handleEnvironmentErrorWithNilReturn(err, command, args)
-		if handleErr != nil {
-			return nil, handleErr
-		}
-		if shouldReturnNil {
-			return nil, nil
-		}
+		return nil, err
 	}
 
 	return &env.EnvironmentResource, nil
@@ -580,7 +569,8 @@ func (r *Runner) CheckEnvironmentExistence(ctx context.Context, envName string, 
 	}
 	appCoreEnv, err := tempRunner.getApplicationsCoreEnvironment(ctx, command, args)
 	if err != nil {
-		// Only return error if it's not a 404 and not a case where environment was not specified
+		appCoreEnv = nil
+		// Only return error if it's not a 404
 		if !clients.Is404Error(err) {
 			return nil, err
 		}
@@ -611,9 +601,11 @@ func (r *Runner) CheckEnvironmentExistence(ctx context.Context, envName string, 
 	if tempRadiusRunner.RadiusCoreClientFactory != nil {
 		radiusCoreEnv, err := tempRadiusRunner.getRadiusCoreEnvironment(ctx, command, args)
 		if err != nil {
-			// In dual-check mode, we want to be more lenient - if Radius.Core fails, we'll just
-			// treat it as not found and continue. We only care about actual conflicts.
-			// Don't fail the entire operation if Radius.Core has issues
+			radiusCoreEnv = nil
+			// Only return error if it's not a 404
+			if !clients.Is404Error(err) {
+				return nil, err
+			}
 		}
 		if radiusCoreEnv != nil {
 			result.RadiusCoreEnv = radiusCoreEnv
