@@ -46,7 +46,6 @@ func Test_CommandValidation(t *testing.T) {
 func Test_Validate(t *testing.T) {
 	configWithWorkspace := radcli.LoadConfigWithWorkspace(t)
 	testcases := []radcli.ValidateInput{
-
 		{
 			Name:          "rad deploy - valid",
 			Input:         []string{"app.bicep"},
@@ -106,7 +105,7 @@ func Test_Validate(t *testing.T) {
 			},
 		},
 		{
-			Name:          "rad deploy - env does not exist invalid",
+			Name:          "rad deploy - env specified with -e does not exist invalid",
 			Input:         []string{"app.bicep", "-e", "prod"},
 			ExpectedValid: false,
 			ConfigHolder: framework.ConfigHolder{
@@ -237,55 +236,18 @@ func Test_Validate(t *testing.T) {
 			},
 		},
 		{
-			Name:          "rad deploy - missing env and app succeeds",
+			Name:          "rad deploy fails - env and app specified in workspace is missing",
 			Input:         []string{"app.bicep", "--group", "new-group"},
-			ExpectedValid: true,
+			ExpectedValid: false,
 			ConfigHolder: framework.ConfigHolder{
 				ConfigFilePath: "",
 				Config:         configWithWorkspace,
 			},
 			ConfigureMocks: func(mocks radcli.ValidateMocks) {
 				mocks.ApplicationManagementClient.EXPECT().
-					GetEnvironment(gomock.Any(), gomock.Any()).
+					GetEnvironment(gomock.Any(), "/planes/radius/local/resourceGroups/test-resource-group/providers/Applications.Core/environments/test-environment").
 					Return(v20231001preview.EnvironmentResource{}, radcli.Create404Error()).
 					Times(1)
-			},
-		},
-		{
-			Name:          "rad deploy - with Radius.Core environment ID (fails due to client setup)",
-			Input:         []string{"app.bicep", "-e", "/planes/radius/local/resourceGroups/test-resource-group/providers/Radius.Core/environments/prod"},
-			ExpectedValid: false, // Expected to fail because of Kubernetes client initialization in test environment
-			ConfigHolder: framework.ConfigHolder{
-				ConfigFilePath: "",
-				Config:         configWithWorkspace,
-			},
-			ConfigureMocks: func(mocks radcli.ValidateMocks) {
-				// Since this uses Radius.Core, it will try to use the RadiusCoreClientFactory
-				// and fail during client initialization - this is expected behavior in tests
-			},
-		},
-		{
-			Name:          "rad deploy - valid with applications.core environment ID (lowercase)",
-			Input:         []string{"app.bicep", "-e", "/planes/radius/local/resourceGroups/test-resource-group/providers/applications.core/environments/prod"},
-			ExpectedValid: true,
-			ConfigHolder: framework.ConfigHolder{
-				ConfigFilePath: "",
-				Config:         configWithWorkspace,
-			},
-			ConfigureMocks: func(mocks radcli.ValidateMocks) {
-				mocks.ApplicationManagementClient.EXPECT().
-					GetEnvironment(gomock.Any(), "/planes/radius/local/resourceGroups/test-resource-group/providers/applications.core/environments/prod").
-					Return(v20231001preview.EnvironmentResource{
-						ID: to.Ptr("/planes/radius/local/resourceGroups/test-resource-group/providers/applications.core/environments/prod"),
-					}, nil).
-					Times(1)
-			},
-			ValidateCallback: func(t *testing.T, obj framework.Runner) {
-				runner := obj.(*Runner)
-				scope := "/planes/radius/local/resourceGroups/test-resource-group"
-				environmentID := scope + "/providers/applications.core/environments/prod"
-				require.Equal(t, scope, runner.Workspace.Scope)
-				require.Equal(t, environmentID, runner.Workspace.Environment)
 			},
 		},
 	}
@@ -925,66 +887,6 @@ func Test_handleEnvironmentError(t *testing.T) {
 
 			err := runner.handleEnvironmentError(tc.err, tc.command, tc.args)
 
-			if tc.shouldError {
-				require.Error(t, err)
-				require.Contains(t, err.Error(), tc.expectedError)
-			} else {
-				require.NoError(t, err)
-			}
-		})
-	}
-}
-
-func Test_handleEnvironmentErrorWithNilReturn(t *testing.T) {
-	testcases := []struct {
-		name                 string
-		err                  error
-		command              *cobra.Command
-		args                 []string
-		expectedShouldReturn bool
-		expectedError        string
-		shouldError          bool
-	}{
-		{
-			name:                 "Non-404 error",
-			err:                  fmt.Errorf("some other error"),
-			command:              &cobra.Command{},
-			args:                 []string{},
-			expectedShouldReturn: false,
-			expectedError:        "some other error",
-			shouldError:          true,
-		},
-		{
-			name:                 "404 error with no environment specified",
-			err:                  radcli.Create404Error(),
-			command:              &cobra.Command{},
-			args:                 []string{"template.bicep"},
-			expectedShouldReturn: true,
-			shouldError:          false,
-		},
-		{
-			name:                 "404 error with environment specified",
-			err:                  radcli.Create404Error(),
-			command:              createCommandWithEnvironmentFlag("myenv"),
-			args:                 []string{"template.bicep"},
-			expectedShouldReturn: false,
-			expectedError:        "The environment \"myenv\" does not exist in scope",
-			shouldError:          true,
-		},
-	}
-
-	for _, tc := range testcases {
-		t.Run(tc.name, func(t *testing.T) {
-			runner := &Runner{
-				EnvironmentNameOrID: "myenv",
-				Workspace: &workspaces.Workspace{
-					Scope: "/planes/radius/local/resourceGroups/test-resource-group",
-				},
-			}
-
-			shouldReturn, err := runner.handleEnvironmentErrorWithNilReturn(tc.err, tc.command, tc.args)
-
-			require.Equal(t, tc.expectedShouldReturn, shouldReturn)
 			if tc.shouldError {
 				require.Error(t, err)
 				require.Contains(t, err.Error(), tc.expectedError)

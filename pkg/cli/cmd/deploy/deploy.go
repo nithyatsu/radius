@@ -283,7 +283,7 @@ func (r *Runner) Run(ctx context.Context) error {
 			err = client.CreateApplicationIfNotFound(ctx, r.ApplicationName, &v20231001preview.ApplicationResource{
 				Location: to.Ptr(v1.LocationGlobal),
 				Properties: &v20231001preview.ApplicationProperties{
-					Environment: &r.Workspace.Environment,
+					Environment: &r.Providers.Radius.EnvironmentID,
 				},
 			})
 			if err != nil {
@@ -470,22 +470,12 @@ func (r *Runner) handleEnvironmentError(err error, command *cobra.Command, args 
 	// If the environment doesn't exist, but the user specified its name or resource id as
 	// a command-line option, return an error
 	if cli.DidSpecifyEnvironmentName(command, args) {
-		return clierrors.Message("The environment %q does not exist in scope %q. Run `rad env create` first. You could also provide the environment ID if the environment exists in a different group.", r, r.Workspace.Scope)
+		return clierrors.Message("The environment %q does not exist in scope %q. Run `rad env create` first. You could also provide the environment ID if the environment exists in a different group.", r.EnvironmentNameOrID, r.Workspace.Scope)
 	}
 
 	// If we got here, it means that the error was a 404 and the user did not specify the environment name.
 	// This is fine, because an environment is not required.
 	return nil
-}
-
-// handleEnvironmentErrorWithNilReturn handles environment errors and returns nil on 404 with no specification
-func (r *Runner) handleEnvironmentErrorWithNilReturn(err error, command *cobra.Command, args []string) (bool, error) {
-	handleErr := r.handleEnvironmentError(err, command, args)
-	if handleErr != nil {
-		return false, handleErr
-	}
-	// Return true to indicate we should return nil (environment not found but that's ok)
-	return true, nil
 }
 
 // setupEnvironmentID sets up the environment ID and workspace environment
