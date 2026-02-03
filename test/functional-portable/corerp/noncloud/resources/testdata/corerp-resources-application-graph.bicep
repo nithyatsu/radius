@@ -68,3 +68,12 @@ resource backendContainer 'Applications.Core/containers@2023-10-01-preview' = {
     }
   }
 }
+
+resource database 'Applications.Datastores/mongoDatabases@2023-10-01-preview' = {
+  name: 'mongodb'
+  location: location
+  properties: {
+    application: app.id
+    environment: environment
+  }
+}

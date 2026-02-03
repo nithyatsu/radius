@@ -35,6 +35,7 @@ import (
 	app_graph "github.com/radius-project/radius/pkg/cli/cmd/app/graph"
 	app_list "github.com/radius-project/radius/pkg/cli/cmd/app/list"
 	app_show "github.com/radius-project/radius/pkg/cli/cmd/app/show"
+	app_staticgraph "github.com/radius-project/radius/pkg/cli/cmd/app/staticgraph"
 	app_status "github.com/radius-project/radius/pkg/cli/cmd/app/status"
 	bicep_generate_kubernetes_manifest "github.com/radius-project/radius/pkg/cli/cmd/bicep/generatekubernetesmanifest"
 	bicep_publish "github.com/radius-project/radius/pkg/cli/cmd/bicep/publish"
@@ -411,6 +412,9 @@ func initSubCommands() {
 
 	appGraphCmd, _ := app_graph.NewCommand(framework)
 	applicationCmd.AddCommand(appGraphCmd)
+
+	appStaticGraphCmd, _ := app_staticgraph.NewCommand(framework)
+	applicationCmd.AddCommand(appStaticGraphCmd)
 
 	envSwitchCmd, _ := env_switch.NewCommand(framework)
 	previewEnvSwitchCmd, _ := env_switch_preview.NewCommand(framework)
