@@ -45,28 +45,34 @@ This command parses a Bicep file and constructs a dependency graph showing
 resources and their connections. Each resource type becomes a node, and each
 connection becomes an edge to the resource indicated by the source field.
 
-The graph is output in JSON format compatible with the 'rad app graph' output.`,
+The graph is output in JSON format by default (compatible with 'rad app graph' output),
+or in Mermaid JS flowchart format when using -o mermaid.`,
 		Example: `
-# Generate a static graph from a Bicep file
+# Generate a static graph from a Bicep file (JSON output)
 rad app staticgraph --file app.bicep
 
 # Generate a static graph from an ARM JSON template
-rad app staticgraph --file app.json`,
+rad app staticgraph --file app.json
+
+# Generate a Mermaid JS flowchart
+rad app staticgraph --file app.bicep -o mermaid`,
 		Args: cobra.NoArgs,
 		RunE: framework.RunCommand(runner),
 	}
 
 	cmd.Flags().StringP("file", "f", "", "Path to the Bicep or ARM JSON template file (required)")
 	_ = cmd.MarkFlagRequired("file")
+	cmd.Flags().StringP("output", "o", "json", "Output format: json or mermaid")
 
 	return cmd, runner
 }
 
 // Runner is the runner implementation for the `rad app staticgraph` command.
 type Runner struct {
-	Bicep    bicep.Interface
-	Output   output.Interface
-	FilePath string
+	Bicep        bicep.Interface
+	Output       output.Interface
+	FilePath     string
+	OutputFormat string
 }
 
 // NewRunner creates a new instance of the `rad app staticgraph` runner.
@@ -88,7 +94,17 @@ func (r *Runner) Validate(cmd *cobra.Command, args []string) error {
 		return clierrors.Message("The --file flag is required.")
 	}
 
+	outputFormat, err := cmd.Flags().GetString("output")
+	if err != nil {
+		return err
+	}
+
+	if outputFormat != "json" && outputFormat != "mermaid" {
+		return clierrors.Message("Invalid output format '%s'. Supported formats: json, mermaid", outputFormat)
+	}
+
 	r.FilePath = filePath
+	r.OutputFormat = outputFormat
 	return nil
 }
 
@@ -106,13 +122,19 @@ func (r *Runner) Run(ctx context.Context) error {
 		return err
 	}
 
-	// Output the graph as JSON
-	jsonOutput, err := json.MarshalIndent(graph, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal graph to JSON: %w", err)
+	// Output the graph in the requested format
+	switch r.OutputFormat {
+	case "mermaid":
+		mermaidOutput := convertToMermaid(graph)
+		r.Output.LogInfo("%s", mermaidOutput)
+	default:
+		jsonOutput, err := json.MarshalIndent(graph, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to marshal graph to JSON: %w", err)
+		}
+		r.Output.LogInfo("%s", string(jsonOutput))
 	}
 
-	r.Output.LogInfo("%s", string(jsonOutput))
 	return nil
 }
 
@@ -424,4 +446,75 @@ func extractFromURL(source string, resourcesByName map[string]*resourceInfo) (st
 	// Check if the hostname looks like a Radius resource name
 	// Default to Applications.Core/containers as a common case
 	return hostname, "Applications.Core/containers"
+}
+
+// convertToMermaid converts the application graph to Mermaid JS flowchart format
+func convertToMermaid(graph *v20231001preview.ApplicationGraphResponse) string {
+	var sb strings.Builder
+
+	sb.WriteString("flowchart TD\n")
+
+	// Create a map to track node IDs for consistent referencing
+	nodeIDs := make(map[string]string)
+
+	// Generate unique node IDs and define nodes
+	for i, res := range graph.Resources {
+		name := to.String(res.Name)
+		resType := to.String(res.Type)
+
+		// Create a safe node ID (alphanumeric only)
+		nodeID := fmt.Sprintf("node%d", i)
+		nodeIDs[name] = nodeID
+
+		// Extract short type name (e.g., "containers" from "Applications.Core/containers")
+		shortType := resType
+		if idx := strings.LastIndex(resType, "/"); idx != -1 {
+			shortType = resType[idx+1:]
+		}
+
+		// Define the node with name and type
+		sb.WriteString(fmt.Sprintf("    %s[%s<br/>%s]\n", nodeID, name, shortType))
+	}
+
+	sb.WriteString("\n")
+
+	// Generate edges for connections
+	for _, res := range graph.Resources {
+		sourceName := to.String(res.Name)
+		sourceID := nodeIDs[sourceName]
+
+		for _, conn := range res.Connections {
+			connID := to.String(conn.ID)
+			// Extract target name from connection ID (format: "Type/Name")
+			targetName := connID
+			if idx := strings.LastIndex(connID, "/"); idx != -1 {
+				targetName = connID[idx+1:]
+			}
+
+			// Find the target node ID
+			if targetID, ok := nodeIDs[targetName]; ok {
+				sb.WriteString(fmt.Sprintf("    %s --> %s\n", sourceID, targetID))
+			} else {
+				// Target not in graph, create an external node reference
+				externalID := sanitizeMermaidID(targetName)
+				sb.WriteString(fmt.Sprintf("    %s --> %s[%s]\n", sourceID, externalID, targetName))
+			}
+		}
+	}
+
+	return sb.String()
+}
+
+// sanitizeMermaidID creates a valid Mermaid node ID from a string
+func sanitizeMermaidID(s string) string {
+	// Replace non-alphanumeric characters with underscores
+	var result strings.Builder
+	for _, c := range s {
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') {
+			result.WriteRune(c)
+		} else {
+			result.WriteRune('_')
+		}
+	}
+	return result.String()
 }
