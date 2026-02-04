@@ -152,6 +152,12 @@ type connectionInfo struct {
 	Source string
 }
 
+// Resource types to ignore in the graph (not useful for dependency visualization)
+var ignoredResourceTypes = map[string]bool{
+	"applications.core/applications":  true,
+	"applications.core/environments":  true,
+}
+
 // buildStaticGraph constructs a static dependency graph from an ARM template
 func buildStaticGraph(template map[string]any) (*v20231001preview.ApplicationGraphResponse, error) {
 	resources, err := extractResources(template)
@@ -168,6 +174,15 @@ func buildStaticGraph(template map[string]any) (*v20231001preview.ApplicationGra
 			resourcesByName[strings.ToLower(resources[i].SymbolicName)] = &resources[i]
 		}
 	}
+
+	// Filter out ignored resource types
+	var filteredResources []resourceInfo
+	for _, res := range resources {
+		if !ignoredResourceTypes[strings.ToLower(res.Type)] {
+			filteredResources = append(filteredResources, res)
+		}
+	}
+	resources = filteredResources
 
 	// Build the graph
 	graphResources := []*v20231001preview.ApplicationGraphResource{}
