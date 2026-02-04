@@ -66,7 +66,13 @@ resource backendContainer 'Applications.Core/containers@2023-10-01-preview' = {
         path: '/healthz'
       }
     }
+    connections: {
+      database: {
+      source: database.id
+    }
   }
+  }
+  
 }
 
 resource database 'Applications.Datastores/mongoDatabases@2023-10-01-preview' = {

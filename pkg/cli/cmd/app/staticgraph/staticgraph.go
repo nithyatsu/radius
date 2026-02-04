@@ -140,9 +140,10 @@ func (r *Runner) Run(ctx context.Context) error {
 
 // resourceInfo holds information about a resource extracted from the template
 type resourceInfo struct {
-	Name        string
-	Type        string
-	Connections []connectionInfo
+	Name         string
+	SymbolicName string // The symbolic name used in ARM template references
+	Type         string
+	Connections  []connectionInfo
 }
 
 // connectionInfo holds information about a connection
@@ -159,9 +160,13 @@ func buildStaticGraph(template map[string]any) (*v20231001preview.ApplicationGra
 	}
 
 	// Build a map of resource names to their info for lookup
+	// Index by both actual name and symbolic name for ARM reference resolution
 	resourcesByName := make(map[string]*resourceInfo)
 	for i := range resources {
 		resourcesByName[strings.ToLower(resources[i].Name)] = &resources[i]
+		if resources[i].SymbolicName != "" {
+			resourcesByName[strings.ToLower(resources[i].SymbolicName)] = &resources[i]
+		}
 	}
 
 	// Build the graph
@@ -234,12 +239,12 @@ func extractResources(template map[string]any) ([]resourceInfo, error) {
 		}
 	case map[string]any:
 		// Newer ARM template format (languageVersion 2.0): resources is an object
-		for _, resRaw := range res {
+		for symbolicName, resRaw := range res {
 			resMap, ok := resRaw.(map[string]any)
 			if !ok {
 				continue
 			}
-			info := extractResourceFromObjectFormat(resMap)
+			info := extractResourceFromObjectFormat(resMap, symbolicName)
 			if info.Name != "" && info.Type != "" {
 				resources = append(resources, info)
 			}
@@ -274,8 +279,10 @@ func extractResourceFromArrayFormat(res map[string]any) resourceInfo {
 }
 
 // extractResourceFromObjectFormat extracts resource info from newer ARM template object format (languageVersion 2.0)
-func extractResourceFromObjectFormat(res map[string]any) resourceInfo {
-	info := resourceInfo{}
+func extractResourceFromObjectFormat(res map[string]any, symbolicName string) resourceInfo {
+	info := resourceInfo{
+		SymbolicName: symbolicName,
+	}
 
 	// Extract type (in object format, type is at the resource level)
 	if resType, ok := res["type"].(string); ok {
@@ -370,6 +377,12 @@ func extractNameFromExpression(expr string) string {
 // resolveConnectionTarget resolves the target resource from a connection source
 // Returns the target name and type
 func resolveConnectionTarget(source string, resourcesByName map[string]*resourceInfo) (string, string) {
+	// Check if source is an ARM template expression referencing another resource
+	// e.g., "[reference('database').id]" or "[reference('myResource').id]"
+	if strings.HasPrefix(source, "[") && strings.Contains(source, "reference(") {
+		return extractFromARMReference(source, resourcesByName)
+	}
+
 	// Check if source is a resource ID (starts with / or contains /providers/)
 	if strings.HasPrefix(source, "/") || strings.Contains(source, "/providers/") {
 		return extractFromResourceID(source)
@@ -390,6 +403,43 @@ func resolveConnectionTarget(source string, resourcesByName map[string]*resource
 	}
 
 	return "", ""
+}
+
+// extractFromARMReference extracts the target resource from an ARM template reference expression
+// e.g., "[reference('database').id]" returns the resource named 'database'
+func extractFromARMReference(expr string, resourcesByName map[string]*resourceInfo) (string, string) {
+	// Pattern: [reference('resourceName').id] or [reference('resourceName').property]
+	// Extract the resource name from between reference(' and ')
+
+	startMarker := "reference('"
+	startIdx := strings.Index(expr, startMarker)
+	if startIdx == -1 {
+		// Try double quotes: reference("resourceName")
+		startMarker = "reference(\""
+		startIdx = strings.Index(expr, startMarker)
+		if startIdx == -1 {
+			return "", ""
+		}
+	}
+
+	startIdx += len(startMarker)
+	endIdx := strings.Index(expr[startIdx:], "'")
+	if endIdx == -1 {
+		endIdx = strings.Index(expr[startIdx:], "\"")
+		if endIdx == -1 {
+			return "", ""
+		}
+	}
+
+	resourceSymbolicName := expr[startIdx : startIdx+endIdx]
+
+	// Look up the resource by its symbolic name (case-insensitive)
+	if res, ok := resourcesByName[strings.ToLower(resourceSymbolicName)]; ok {
+		return res.Name, res.Type
+	}
+
+	// If not found by symbolic name, the symbolic name might be the actual resource name
+	return resourceSymbolicName, ""
 }
 
 // extractFromResourceID extracts name and type from a resource ID
