@@ -20,25 +20,59 @@ import (
 )
 
 // NewCommand creates an instance of the command and runner for the `rad app graph` command.
+//
+// When the positional argument is a Bicep file (*.bicep), the command generates
+// a static application graph from the compiled template without deployment.
+// Otherwise, it queries the Radius API for the deployed application graph.
 func NewCommand(factory framework.Factory) (*cobra.Command, framework.Runner) {
 	runner := NewRunner(factory)
 	cmd := &cobra.Command{
-		Use:   "graph",
+		Use:   "graph [application or file.bicep]",
 		Short: "Shows the application graph for an application.",
-		Long:  `Shows the application graph for an application.`,
-		Args:  cobra.MaximumNArgs(1),
+		Long: `Shows the application graph for an application.
+
+When a Bicep file path is provided (e.g., app.bicep), the command generates a
+static application graph by compiling the template locally. No deployment or
+Radius connection is required.
+
+When an application name is provided (or no argument), the command queries the
+Radius API for the deployed application graph.`,
+		Args: cobra.MaximumNArgs(1),
 		Example: `
 # Show graph for current application
 rad app graph
 
 # Show graph for specified application
-rad app graph my-application`,
-		RunE: framework.RunCommand(runner),
+rad app graph my-application
+
+# Show static graph from a Bicep file
+rad app graph app.bicep
+
+# Show static graph with parameters
+rad app graph app.bicep --parameters params.json`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Detect whether the argument is a Bicep file
+			if len(args) > 0 && IsBicepFile(args[0]) {
+				paramFile, _ := cmd.Flags().GetString("parameters")
+				staticRunner := &StaticRunner{
+					Output:        factory.GetOutput(),
+					Bicep:         factory.GetBicep(),
+					FilePath:      args[0],
+					ParameterFile: paramFile,
+				}
+				return framework.RunCommand(staticRunner)(cmd, args)
+			}
+
+			// Default: query the Radius API for the deployed graph
+			return framework.RunCommand(runner)(cmd, args)
+		},
 	}
 
 	commonflags.AddWorkspaceFlag(cmd)
 	commonflags.AddResourceGroupFlag(cmd)
 	commonflags.AddApplicationNameFlag(cmd)
+
+	cmd.Flags().String("parameters", "", "Path to a Bicep parameter file (used with .bicep file input)")
 
 	return cmd, runner
 }

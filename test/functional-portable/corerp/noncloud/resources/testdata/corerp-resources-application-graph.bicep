@@ -4,13 +4,13 @@ extension radius
 param location string = 'local'
 
 @description('Specifies the environment for resources.')
-param environment string
+param environment string = 'default'
 
 @description('Specifies the port for the container resource.')
 param port int = 3000
 
 @description('Specifies the image for the container resource.')
-param magpieimage string
+param magpieimage string = 'ghcr.io/image-registry/magpie:latest'
 
 resource app 'Applications.Core/applications@2023-10-01-preview' = {
   name: 'corerp-application-simple1'
