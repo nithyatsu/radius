@@ -89,6 +89,7 @@ func Test_StaticRunner_Run(t *testing.T) {
 			Output:   outputSink,
 			Bicep:    mockBicep,
 			FilePath: "/tmp/app.bicep",
+			Stdout:   true,
 		}
 
 		err := runner.Run(context.Background())
@@ -146,6 +147,7 @@ func Test_StaticRunner_Run(t *testing.T) {
 			Output:   outputSink,
 			Bicep:    mockBicep,
 			FilePath: "/tmp/invalid.bicep",
+			Stdout:   true,
 		}
 
 		err := runner.Run(context.Background())
@@ -175,6 +177,7 @@ func Test_StaticRunner_Run(t *testing.T) {
 			Output:   outputSink,
 			Bicep:    mockBicep,
 			FilePath: "/tmp/empty.bicep",
+			Stdout:   true,
 		}
 
 		err := runner.Run(context.Background())
@@ -224,6 +227,7 @@ func Test_StaticRunner_Run(t *testing.T) {
 			Output:   outputSink,
 			Bicep:    mockBicep,
 			FilePath: "/tmp/parameterized.bicep",
+			Stdout:   true,
 		}
 
 		err := runner.Run(context.Background())
@@ -279,6 +283,7 @@ func Test_StaticRunner_Run(t *testing.T) {
 			Output:   outputSink,
 			Bicep:    mockBicep,
 			FilePath: "/tmp/app.bicep",
+			Stdout:   true,
 		}
 
 		err := runner.Run(context.Background())

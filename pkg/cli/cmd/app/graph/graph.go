@@ -54,11 +54,19 @@ rad app graph app.bicep --parameters params.json`,
 			// Detect whether the argument is a Bicep file
 			if len(args) > 0 && IsBicepFile(args[0]) {
 				paramFile, _ := cmd.Flags().GetString("parameters")
+				stdoutFlag, _ := cmd.Flags().GetBool("stdout")
+				outputPath, _ := cmd.Flags().GetString("output")
+				format, _ := cmd.Flags().GetString("format")
+				noGit, _ := cmd.Flags().GetBool("no-git")
 				staticRunner := &StaticRunner{
 					Output:        factory.GetOutput(),
 					Bicep:         factory.GetBicep(),
 					FilePath:      args[0],
 					ParameterFile: paramFile,
+					Stdout:        stdoutFlag,
+					OutputPath:    outputPath,
+					Format:        format,
+					NoGit:         noGit,
 				}
 				return framework.RunCommand(staticRunner)(cmd, args)
 			}
@@ -73,6 +81,10 @@ rad app graph app.bicep --parameters params.json`,
 	commonflags.AddApplicationNameFlag(cmd)
 
 	cmd.Flags().String("parameters", "", "Path to a Bicep parameter file (used with .bicep file input)")
+	cmd.Flags().Bool("stdout", false, "Write JSON output to stdout instead of a file (static graph only)")
+	cmd.Flags().StringP("output", "o", "", "Custom file path for JSON output (static graph only)")
+	cmd.Flags().String("format", "", "Additional output format: 'markdown' (static graph only)")
+	cmd.Flags().Bool("no-git", false, "Disable git metadata enrichment (static graph only)")
 
 	return cmd, runner
 }

@@ -18,12 +18,12 @@ package graph
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"time"
 
 	"github.com/radius-project/radius/pkg/cli/bicep"
+	"github.com/radius-project/radius/pkg/cli/git"
 	"github.com/radius-project/radius/pkg/cli/output"
 	v20231001preview "github.com/radius-project/radius/pkg/corerp/api/v20231001preview"
 	"github.com/radius-project/radius/pkg/version"
@@ -41,6 +41,18 @@ type StaticRunner struct {
 
 	// ParameterFile is the optional path to a parameter file.
 	ParameterFile string
+
+	// Stdout controls whether output goes to stdout instead of a file.
+	Stdout bool
+
+	// OutputPath is an optional custom file path for JSON output.
+	OutputPath string
+
+	// Format controls additional output formats (e.g., "markdown").
+	Format string
+
+	// NoGit disables git metadata enrichment when true.
+	NoGit bool
 }
 
 // Validate checks that the Bicep file path is valid and accessible.
@@ -66,7 +78,7 @@ func (r *StaticRunner) Validate(cmd *cobra.Command, args []string) error {
 //  4. Detect connections between resources
 //  5. Compute source hash for staleness detection
 //  6. Build the AppGraph structure
-//  7. Serialize as JSON to stdout
+//  7. Write output (JSON file, stdout, or Markdown)
 func (r *StaticRunner) Run(ctx context.Context) error {
 	// Step 1: Compile Bicep to ARM JSON
 	template, err := r.Bicep.PrepareTemplate(r.FilePath)
@@ -132,13 +144,23 @@ func (r *StaticRunner) Run(ctx context.Context) error {
 		Connections: connections,
 	}
 
-	// Step 7: Serialize to JSON and output to stdout
-	jsonBytes, err := json.MarshalIndent(appGraph, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to serialize app graph: %w", err)
+	// Step 6b: Enrich with git metadata (unless --no-git)
+	if !r.NoGit {
+		enrichResult, err := git.EnrichResources(appGraph.Resources, r.FilePath)
+		if err == nil && enrichResult.HeadSHA != "" {
+			appGraph.Metadata.GitCommit = enrichResult.HeadSHA
+		}
+		// Non-fatal: continue even if enrichment fails
 	}
 
-	r.Output.LogInfo("%s", string(jsonBytes))
+	// Step 7: Write output (file or stdout)
+	config := OutputConfig{
+		Stdout:        r.Stdout,
+		OutputPath:    r.OutputPath,
+		Format:        r.Format,
+		BicepFilePath: r.FilePath,
+	}
 
-	return nil
+	_, err = WriteGraphOutput(appGraph, config, r.Output)
+	return err
 }

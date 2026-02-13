@@ -1,0 +1,118 @@
+{
+  "metadata": {
+    "generatedAt": "2026-02-13T17:32:56.004277Z",
+    "radiusCliVersion": "edge",
+    "sourceFiles": [
+      "corerp-resources-application-graph.bicep"
+    ],
+    "sourceHash": "sha256:4f5a906e8d66b2417aa56ddbaa2228767ccc8f90d2fd9b537ec79a7016894473",
+    "gitCommit": "d9b6132209a014007cc5f0262fb57d4279ebbbae"
+  },
+  "resources": [
+    {
+      "id": "/planes/radius/local/resourceGroups/default/providers/Applications.Core/applications/corerp-application-simple1",
+      "name": "corerp-application-simple1",
+      "type": "Applications.Core/applications",
+      "sourceLocation": {
+        "file": "corerp-resources-application-graph.bicep",
+        "line": 15
+      },
+      "gitInfo": {
+        "commitSha": "2972e950cf53fd55230393d426c5edec2d16fc8a",
+        "commitShort": "2972e950c",
+        "author": "98416062+nithyatsu@users.noreply.github.com",
+        "date": "2023-10-25T19:44:48Z",
+        "message": "implement getgraph API (#6432)"
+      },
+      "properties": {
+        "environment": "[parameters('environment')]"
+      }
+    },
+    {
+      "id": "/planes/radius/local/resourceGroups/default/providers/Applications.Core/containers/http-back-ctnr-simple1",
+      "name": "http-back-ctnr-simple1",
+      "type": "Applications.Core/containers",
+      "sourceLocation": {
+        "file": "corerp-resources-application-graph.bicep",
+        "line": 50
+      },
+      "gitInfo": {
+        "commitSha": "2972e950cf53fd55230393d426c5edec2d16fc8a",
+        "commitShort": "2972e950c",
+        "author": "98416062+nithyatsu@users.noreply.github.com",
+        "date": "2023-10-25T19:44:48Z",
+        "message": "implement getgraph API (#6432)"
+      },
+      "properties": {
+        "application": "[reference('app').id]",
+        "container": {
+          "image": "[parameters('magpieimage')]",
+          "ports": {
+            "web": {
+              "containerPort": "[parameters('port')]"
+            }
+          },
+          "readinessProbe": {
+            "containerPort": "[parameters('port')]",
+            "kind": "httpGet",
+            "path": "/healthz"
+          }
+        }
+      }
+    },
+    {
+      "id": "/planes/radius/local/resourceGroups/default/providers/Applications.Core/containers/http-front-ctnr-simple1",
+      "name": "http-front-ctnr-simple1",
+      "type": "Applications.Core/containers",
+      "sourceLocation": {
+        "file": "corerp-resources-application-graph.bicep",
+        "line": 23
+      },
+      "gitInfo": {
+        "commitSha": "2972e950cf53fd55230393d426c5edec2d16fc8a",
+        "commitShort": "2972e950c",
+        "author": "98416062+nithyatsu@users.noreply.github.com",
+        "date": "2023-10-25T19:44:48Z",
+        "message": "implement getgraph API (#6432)"
+      },
+      "properties": {
+        "application": "[reference('app').id]",
+        "connections": {
+          "backend": {
+            "source": "http://http-back-ctnr-simple1:3000"
+          }
+        },
+        "container": {
+          "image": "[parameters('magpieimage')]",
+          "ports": {
+            "web": {
+              "containerPort": "[parameters('port')]"
+            }
+          },
+          "readinessProbe": {
+            "containerPort": "[parameters('port')]",
+            "kind": "httpGet",
+            "path": "/healthz"
+          }
+        }
+      }
+    }
+  ],
+  "connections": [
+    {
+      "sourceId": "/planes/radius/local/resourceGroups/default/providers/Applications.Core/containers/http-back-ctnr-simple1",
+      "targetId": "app",
+      "type": "dependsOn"
+    },
+    {
+      "sourceId": "/planes/radius/local/resourceGroups/default/providers/Applications.Core/containers/http-front-ctnr-simple1",
+      "targetId": "app",
+      "type": "dependsOn"
+    },
+    {
+      "sourceId": "/planes/radius/local/resourceGroups/default/providers/Applications.Core/containers/http-front-ctnr-simple1",
+      "targetId": "http://http-back-ctnr-simple1:3000",
+      "type": "connection"
+    }
+  ]
+}
