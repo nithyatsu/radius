@@ -4,7 +4,7 @@ extension radius
 param location string = 'local'
 
 @description('Specifies the environment for resources.')
-param environment string
+param environment string = 'defailt'
 
 @description('Specifies the port for the container resource.')
 param port int = 3000

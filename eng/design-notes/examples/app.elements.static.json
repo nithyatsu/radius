@@ -1,0 +1,34 @@
+{
+  "elements": [
+    {
+      "group": "nodes",
+      "data": {
+        "id": "/planes/radius/local/resourcegroups/default/providers/Applications.Core/containers/frontend",
+        "resourceId": "/planes/radius/local/resourcegroups/default/providers/Applications.Core/containers/frontend",
+        "label": "frontend\ncontainers",
+        "codeReference": "app.bicep#L18",
+        "appDefinitionLine": 18,
+        "diffHash": "sha256:1f7c2a9b3e5d4f60a8c9b1d2e3f4051627384950a1b2c3d4e5f6071829304152"
+      }
+    },
+    {
+      "group": "nodes",
+      "data": {
+        "id": "/planes/radius/local/resourcegroups/default/providers/Applications.Datastores/redisCaches/cache",
+        "resourceId": "/planes/radius/local/resourcegroups/default/providers/Applications.Datastores/redisCaches/cache",
+        "label": "cache\nredisCaches",
+        "codeReference": "app.bicep#L36",
+        "appDefinitionLine": 36,
+        "diffHash": "sha256:9a8b7c6d5e4f30215867493020abcdef1122334455667788990011223344aabb"
+      }
+    },
+    {
+      "group": "edges",
+      "data": {
+        "id": "/planes/radius/local/resourcegroups/default/providers/Applications.Core/containers/frontend-->/planes/radius/local/resourcegroups/default/providers/Applications.Datastores/redisCaches/cache",
+        "source": "/planes/radius/local/resourcegroups/default/providers/Applications.Core/containers/frontend",
+        "target": "/planes/radius/local/resourcegroups/default/providers/Applications.Datastores/redisCaches/cache"
+      }
+    }
+  ]
+}

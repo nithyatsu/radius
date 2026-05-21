@@ -1,0 +1,118 @@
+{
+  "elements": [
+    {
+      "group": "nodes",
+      "data": {
+        "id": "/planes/radius/local/resourcegroups/default/providers/Microsoft.Authorization/locks/DeleteLock",
+        "resourceId": "/planes/radius/local/resourcegroups/default/providers/Microsoft.Authorization/locks/DeleteLock",
+        "label": "DeleteLock\nlocks",
+        "diffHash": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+      }
+    },
+    {
+      "group": "nodes",
+      "data": {
+        "id": "/planes/radius/local/resourcegroups/default/providers/Microsoft.Monitor/accounts/[parameters('azureMonitorWorkspaceName')]",
+        "resourceId": "/planes/radius/local/resourcegroups/default/providers/Microsoft.Monitor/accounts/[parameters('azureMonitorWorkspaceName')]",
+        "label": "[parameters('azureMonitorWorkspaceName')]\naccounts",
+        "diffHash": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+      }
+    },
+    {
+      "group": "nodes",
+      "data": {
+        "id": "/planes/radius/local/resourcegroups/default/providers/Microsoft.Resources/deployments/[parameters('aksClusterName')]",
+        "resourceId": "/planes/radius/local/resourcegroups/default/providers/Microsoft.Resources/deployments/[parameters('aksClusterName')]",
+        "label": "[parameters('aksClusterName')]\ndeployments",
+        "diffHash": "sha256:5157a0aabc45ec8074b5d7547126edbdd50dacacb221d97559c0516accc363fe"
+      }
+    },
+    {
+      "group": "nodes",
+      "data": {
+        "id": "/planes/radius/local/resourcegroups/default/providers/Microsoft.Resources/deployments/[parameters('grafanaDashboardName')]",
+        "resourceId": "/planes/radius/local/resourcegroups/default/providers/Microsoft.Resources/deployments/[parameters('grafanaDashboardName')]",
+        "label": "[parameters('grafanaDashboardName')]\ndeployments",
+        "diffHash": "sha256:47b9d7e47076edbfc8f30a4a98493b059a689d6e24111f6460263795804fd0e2"
+      }
+    },
+    {
+      "group": "nodes",
+      "data": {
+        "id": "/planes/radius/local/resourcegroups/default/providers/Microsoft.Resources/deployments/[parameters('logAnalyticsWorkspaceName')]",
+        "resourceId": "/planes/radius/local/resourcegroups/default/providers/Microsoft.Resources/deployments/[parameters('logAnalyticsWorkspaceName')]",
+        "label": "[parameters('logAnalyticsWorkspaceName')]\ndeployments",
+        "diffHash": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+      }
+    },
+    {
+      "group": "nodes",
+      "data": {
+        "id": "/planes/radius/local/resourcegroups/default/providers/Microsoft.Resources/deployments/alertManagement",
+        "resourceId": "/planes/radius/local/resourcegroups/default/providers/Microsoft.Resources/deployments/alertManagement",
+        "label": "alertManagement\ndeployments",
+        "diffHash": "sha256:830d930caca629245fa2ec72a93476068e1b5b3fea34f3412462c8516561ce28"
+      }
+    },
+    {
+      "group": "nodes",
+      "data": {
+        "id": "/planes/radius/local/resourcegroups/default/providers/Microsoft.Resources/deployments/dataCollection",
+        "resourceId": "/planes/radius/local/resourcegroups/default/providers/Microsoft.Resources/deployments/dataCollection",
+        "label": "dataCollection\ndeployments",
+        "diffHash": "sha256:e821bd44d2ee70411b8e83ffd6da02c4b63928594ed5dac70ee27c13a616911c"
+      }
+    },
+    {
+      "group": "nodes",
+      "data": {
+        "id": "/planes/radius/local/resourcegroups/default/providers/Microsoft.Resources/deployments/deploymentScript",
+        "resourceId": "/planes/radius/local/resourcegroups/default/providers/Microsoft.Resources/deployments/deploymentScript",
+        "label": "deploymentScript\ndeployments",
+        "diffHash": "sha256:64f9f5608b452e31298f19f627d7771abd5b80a107141f03fa96e8e12ae556e6"
+      }
+    },
+    {
+      "group": "nodes",
+      "data": {
+        "id": "/planes/radius/local/resourcegroups/default/providers/Microsoft.Resources/deployments/loganalytics-datacollection",
+        "resourceId": "/planes/radius/local/resourcegroups/default/providers/Microsoft.Resources/deployments/loganalytics-datacollection",
+        "label": "loganalytics-datacollection\ndeployments",
+        "diffHash": "sha256:dda97eb8a8c071e373c68357b691c47e3a02e25841a6571e8dfc4d8314b597fb"
+      }
+    },
+    {
+      "group": "nodes",
+      "data": {
+        "id": "/planes/radius/local/resourcegroups/default/providers/Microsoft.Resources/deployments/metrics-configmap",
+        "resourceId": "/planes/radius/local/resourcegroups/default/providers/Microsoft.Resources/deployments/metrics-configmap",
+        "label": "metrics-configmap\ndeployments",
+        "diffHash": "sha256:9eeb3a35ff8a7f94dec63b0a850417f9f1e0dcfbef4f1f7c4ec157fff6db8beb"
+      }
+    },
+    {
+      "group": "edges",
+      "data": {
+        "id": "/planes/radius/local/resourcegroups/default/providers/Microsoft.Resources/deployments/alertManagement--\u003e/planes/radius/local/resourcegroups/default/providers/Microsoft.Resources/deployments/dataCollection",
+        "source": "/planes/radius/local/resourcegroups/default/providers/Microsoft.Resources/deployments/alertManagement",
+        "target": "/planes/radius/local/resourcegroups/default/providers/Microsoft.Resources/deployments/dataCollection"
+      }
+    },
+    {
+      "group": "edges",
+      "data": {
+        "id": "/planes/radius/local/resourcegroups/default/providers/Microsoft.Resources/deployments/metrics-configmap--\u003e/planes/radius/local/resourcegroups/default/providers/Microsoft.Resources/deployments/alertManagement",
+        "source": "/planes/radius/local/resourcegroups/default/providers/Microsoft.Resources/deployments/metrics-configmap",
+        "target": "/planes/radius/local/resourcegroups/default/providers/Microsoft.Resources/deployments/alertManagement"
+      }
+    },
+    {
+      "group": "edges",
+      "data": {
+        "id": "/planes/radius/local/resourcegroups/default/providers/Microsoft.Resources/deployments/metrics-configmap--\u003e/planes/radius/local/resourcegroups/default/providers/Microsoft.Resources/deployments/dataCollection",
+        "source": "/planes/radius/local/resourcegroups/default/providers/Microsoft.Resources/deployments/metrics-configmap",
+        "target": "/planes/radius/local/resourcegroups/default/providers/Microsoft.Resources/deployments/dataCollection"
+      }
+    }
+  ]
+}
