@@ -1,0 +1,32 @@
+{
+  "resources": [
+    {
+      "connections": [
+        {
+          "direction": "Outbound",
+          "id": "/planes/radius/local/resourcegroups/default/providers/Applications.Messaging/rabbitMQQueues/rmq-recipe-resource"
+        }
+      ],
+      "diffHash": "sha256:e1810fd5949c2ec2a82a8e5870bfe20e89ba7aa3554f3941ed06ca6e43926468",
+      "id": "/planes/radius/local/resourcegroups/default/providers/Applications.Core/containers/rmq-recipe-app-ctnr",
+      "name": "rmq-recipe-app-ctnr",
+      "outputResources": [],
+      "provisioningState": "NotSpecified",
+      "type": "Applications.Core/containers"
+    },
+    {
+      "connections": [
+        {
+          "direction": "Inbound",
+          "id": "/planes/radius/local/resourcegroups/default/providers/Applications.Core/containers/rmq-recipe-app-ctnr"
+        }
+      ],
+      "diffHash": "sha256:60f9d57f4333c0648596e496a137072cac7b02f5d60149d51a10bbba8b3b719e",
+      "id": "/planes/radius/local/resourcegroups/default/providers/Applications.Messaging/rabbitMQQueues/rmq-recipe-resource",
+      "name": "rmq-recipe-resource",
+      "outputResources": [],
+      "provisioningState": "NotSpecified",
+      "type": "Applications.Messaging/rabbitMQQueues"
+    }
+  ]
+}
