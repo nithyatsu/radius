@@ -13,8 +13,10 @@ echo "Setting up port forwarding for deployment engine..."
 # Kill any existing port forward
 pkill -f "port-forward.*deployment-engine" 2>/dev/null || true
 
-# Start port forwarding in background and save PID
-kubectl --context k3d-radius-debug port-forward -n default service/deployment-engine 5017:5445 > "$DEBUG_ROOT/logs/de-port-forward.log" 2>&1 &
+# Start port forwarding in background and save PID. Service port matches the
+# production chart's bicep-de service (6443). We expose it on host 5017 to match
+# the routing entry in build/configs/ucp.yaml.
+kubectl --context k3d-radius-debug port-forward -n default service/deployment-engine 5017:6443 > "$DEBUG_ROOT/logs/de-port-forward.log" 2>&1 &
 port_forward_pid=$!
 
 # Save the PID for later cleanup

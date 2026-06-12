@@ -77,20 +77,24 @@ spec:
       containers:
       - name: deployment-engine
         image: ghcr.io/radius-project/deployment-engine:latest
+        # Use --kubernetes=true to match the production Helm chart. The --local flag
+        # makes DE assume a developer-machine layout (kube-apiserver at localhost:6443
+        # of the DE process), which is wrong when DE is running inside a pod and breaks
+        # any recipe that deploys Kubernetes resources via the bicep kubernetes extension.
         args:
-        - --local
+        - --kubernetes=true
         volumeMounts:
         - name: appsettings-vol
           mountPath: /app/appsettings.Production.json
           subPath: appsettings.Production.json
         ports:
-        - containerPort: 5445
+        - containerPort: 6443
           name: http
         env:
         - name: ASPNETCORE_ENVIRONMENT
           value: "Production"
         - name: ASPNETCORE_URLS
-          value: "http://+:5445"
+          value: "http://+:6443"
         - name: RADIUSBACKENDURL
           value: "http://host.k3d.internal:9000/apis/api.ucp.dev/v1alpha3"
         - name: SKIP_ARM
@@ -128,7 +132,7 @@ spec:
   selector:
     app: deployment-engine
   ports:
-  - port: 5445
-    targetPort: 5445
+  - port: 6443
+    targetPort: 6443
     name: http
   type: ClusterIP

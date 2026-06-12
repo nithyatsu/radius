@@ -10,11 +10,34 @@ echo "=========================="
 
 components=("ucp" "controller" "applications-rp" "dynamic-rp")
 
+# Service port that each component listens on once fully initialized. The PID file
+# typically points at dlv, which can stay alive after the wrapped binary exits, so
+# checking the listener port is the real liveness signal. Using a case statement
+# instead of `declare -A` for compatibility with macOS's bash 3.2.
+component_port() {
+  case "$1" in
+    ucp) echo 9000 ;;
+    controller) echo 7073 ;;
+    applications-rp) echo 8080 ;;
+    dynamic-rp) echo 8082 ;;
+    *) echo "" ;;
+  esac
+}
+
 for component in "${components[@]}"; do
+  port=$(component_port "$component")
+  listener_up=0
+  if [ -n "$port" ] && lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+    listener_up=1
+  fi
   if [ -f "logs/${component}.pid" ]; then
     pid=$(cat "logs/${component}.pid")
     if kill -0 "$pid" 2>/dev/null; then
-      echo "✅ $component (PID: $pid) - Running"
+      if [ "$listener_up" -eq 1 ]; then
+        echo "✅ $component (PID: $pid, port: $port) - Running"
+      else
+        echo "⚠️  $component (PID: $pid) - dlv alive but binary not listening on :$port (check logs/${component}.log)"
+      fi
     else
       echo "❌ $component - PID file exists but process not running"
     fi
