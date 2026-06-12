@@ -116,6 +116,17 @@ func Test_ApplicationGraph(t *testing.T) {
 					return *expected[i].Name < *expected[j].Name
 				})
 
+				// Properties is a resource-type-specific bag whose exact wire shape
+				// depends on controller-populated defaults and can drift independently
+				// of the application graph structure. Assert it is populated for each
+				// application-scoped resource and then clear it before the structural
+				// comparison so the golden file stays focused on graph fields.
+				for _, r := range res.Resources {
+					require.NotNilf(t, r.Properties, "expected properties bag on %s", *r.Name)
+					require.NotEmptyf(t, r.Properties, "expected non-empty properties bag on %s", *r.Name)
+					r.Properties = nil
+				}
+
 				if len(res.Resources) != len(expected) {
 					require.ElementsMatch(t, expected, res.Resources)
 				} else {

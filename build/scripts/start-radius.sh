@@ -310,17 +310,30 @@ if [ $attempt -eq $max_attempts ]; then
 fi
 print_success "UCP started and initialized successfully"
 
+# Install Radius CRDs in the current kube context. The Helm chart installs these
+# automatically (deploy/Chart/crds/) but the debug environment skips Helm, so we
+# do it explicitly. Without these, the controller crashes during cache sync with
+# "failed to wait for deploymenttemplate caches to sync kind source: *v1alpha3.DeploymentResource".
+echo "Installing Radius CRDs in current kube context..."
+if kubectl apply -f "$REPO_ROOT/deploy/Chart/crds/radius/" -f "$REPO_ROOT/deploy/Chart/crds/ucpd/" >/dev/null 2>&1; then
+  print_success "Radius CRDs applied"
+else
+  print_warning "Failed to apply Radius CRDs - controller will likely crash on startup"
+fi
+
 # Start Controller with dlv
 echo "Starting Controller with dlv on port 40002..."
 dlv exec "$DEBUG_ROOT/bin/controller" --listen=127.0.0.1:40002 --headless=true --api-version=2 --accept-multiclient --continue -- --config-file="$SCRIPT_DIR/../configs/controller.yaml" --cert-dir="" > "$DEBUG_ROOT/logs/controller.log" 2>&1 &
 echo $! > "$DEBUG_ROOT/logs/controller.pid"
 
-# Wait for Controller to start (check health endpoint)
+# Wait for Controller to bind its health probe listener. As with dynamic-rp, we
+# check the TCP listener rather than curl /healthz so that we also detect the
+# case where the binary exited but dlv is still alive on its debug port.
 echo "Waiting for Controller to start..."
 attempt=0
 max_attempts=15
 while [ $attempt -lt $max_attempts ]; do
-  if curl -s "http://localhost:7073/healthz" > /dev/null 2>&1; then
+  if lsof -nP -iTCP:7073 -sTCP:LISTEN >/dev/null 2>&1; then
     break
   fi
   sleep 2
@@ -328,7 +341,7 @@ while [ $attempt -lt $max_attempts ]; do
 done
 
 if [ $attempt -eq $max_attempts ]; then
-  print_warning "Controller health check failed, but continuing (check logs: $DEBUG_ROOT/logs/controller.log)"
+  print_warning "Controller did not start listening on :7073 (check logs: $DEBUG_ROOT/logs/controller.log)"
 else
   print_success "Controller started successfully"
 fi
@@ -356,17 +369,45 @@ else
   print_success "Applications RP started successfully"
 fi
 
+# Ensure radius-system/radius-encryption-key secret exists. dynamic-rp refuses to
+# start without it (pkg/dynamicrp/frontend/service.go createSensitiveDataHandler).
+# In a real install this is created by the Helm chart (deploy/Chart/templates/dynamic-rp/secret.yaml).
+# We create an equivalent secret in whatever cluster the current kube context points at
+# because dynamic-rp.yaml is configured with `kubernetes.kind: default` which uses that context.
+echo "Ensuring radius-system/radius-encryption-key secret exists..."
+if ! kubectl get namespace radius-system >/dev/null 2>&1; then
+  kubectl create namespace radius-system >/dev/null
+fi
+if ! kubectl -n radius-system get secret radius-encryption-key >/dev/null 2>&1; then
+  enc_now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  if date -u -v+90d +"%Y-%m-%dT%H:%M:%SZ" >/dev/null 2>&1; then
+    enc_exp=$(date -u -v+90d +"%Y-%m-%dT%H:%M:%SZ")     # BSD/macOS date
+  else
+    enc_exp=$(date -u -d "+90 days" +"%Y-%m-%dT%H:%M:%SZ")  # GNU date
+  fi
+  enc_key=$(openssl rand -base64 32)
+  enc_json=$(printf '{"currentVersion":1,"keys":{"1":{"key":"%s","version":1,"createdAt":"%s","expiresAt":"%s"}}}' \
+    "$enc_key" "$enc_now" "$enc_exp")
+  kubectl -n radius-system create secret generic radius-encryption-key \
+    --from-literal=keys.json="$enc_json" >/dev/null
+  print_success "Created radius-encryption-key secret in radius-system namespace"
+else
+  print_info "radius-encryption-key secret already present"
+fi
+
 # Start Dynamic RP with dlv
 echo "Starting Dynamic RP with dlv on port 40004..."
 dlv exec "$DEBUG_ROOT/bin/dynamic-rp" --listen=127.0.0.1:40004 --headless=true --api-version=2 --accept-multiclient --continue -- --config-file="$SCRIPT_DIR/../configs/dynamic-rp.yaml" > "$DEBUG_ROOT/logs/dynamic-rp.log" 2>&1 &
 echo $! > "$DEBUG_ROOT/logs/dynamic-rp.pid"
 
-# Wait for Dynamic RP to start
+# Wait for Dynamic RP to bind its listener port. We can't rely on /healthz because
+# the dynamic-rp router does not expose it at root and would return 404 even when healthy.
+# Checking the TCP listener also catches the case where the binary exited but dlv is still up.
 echo "Waiting for Dynamic RP to start..."
 attempt=0
 max_attempts=15
 while [ $attempt -lt $max_attempts ]; do
-  if curl -s "http://localhost:8082/healthz" > /dev/null 2>&1; then
+  if lsof -nP -iTCP:8082 -sTCP:LISTEN >/dev/null 2>&1; then
     break
   fi
   sleep 2
@@ -374,7 +415,7 @@ while [ $attempt -lt $max_attempts ]; do
 done
 
 if [ $attempt -eq $max_attempts ]; then
-  print_warning "Dynamic RP health check failed, but continuing (check logs: $DEBUG_ROOT/logs/dynamic-rp.log)"
+  print_warning "Dynamic RP did not start listening on :8082 (check logs: $DEBUG_ROOT/logs/dynamic-rp.log)"
 else
   print_success "Dynamic RP started successfully"
 fi
