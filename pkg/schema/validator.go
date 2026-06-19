@@ -829,13 +829,12 @@ func (v *Validator) checkReservedProperties(schema *openapi3.Schema) error {
 		}
 	}
 
-	// Check that environment property is always included
-	if schema.Properties != nil {
-		if _, hasEnv := schema.Properties[reservedPropEnvironment]; !hasEnv {
-			err := NewConstraintError(reservedPropEnvironment, fmt.Sprintf("property '%s' must be included in schema", reservedPropEnvironment))
-			errors.Add(err)
-		}
-	}
+	// Note: as of the base resource manifest feature
+	// (specs/210-base-resource-manifest/), there is intentionally NO global
+	// requirement that the "environment" property be present in every schema.
+	// A per-type schema that wants to require environment must list it in
+	// its own required: array; otherwise the property is optional and the
+	// base resource manifest's optional shape applies.
 
 	if errors.HasErrors() {
 		return &errors
