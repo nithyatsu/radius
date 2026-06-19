@@ -304,6 +304,209 @@ What each package covers:
 - [pkg/dynamicrp/datamodel](/pkg/dynamicrp/datamodel/) — `CodeReference()` accessor covers nil, missing, non-string, and valid string cases.
 - [bicep-tools/pkg/converter](/bicep-tools/pkg/converter/) — parallel `applyBaseResource` tests plus `TestApplyBaseResource_PropertiesMatchCanonicalYAML`, which fails loudly if the hardcoded list in `bicep-tools` ever drifts from [pkg/schema/baseresource/base.yaml](/pkg/schema/baseresource/base.yaml).
 
+### Worked example: migrating `testresourcetypes.yaml`
+
+The repository ships a real multi-type fixture at [test/functional-portable/dynamicrp/noncloud/resources/testdata/testresourcetypes.yaml](/test/functional-portable/dynamicrp/noncloud/resources/testdata/testresourcetypes.yaml) that pre-dates the base resource manifest. Every type in that file restates `application` and `environment` (and sometimes `connections`) by hand. This is the recommended end-to-end test plan: rewrite the file to use the `$ref` opt-in, then verify both `rad resource-type create` and `rad bicep publish-extension`.
+
+#### What to rewrite, and what NOT to
+
+Each type declares some combination of `application`, `environment`, and `connections`. Substitute those base properties with `allOf: [{$ref: "radius:base"}]`. **Keep** type-specific properties (`port`, `database`, `username`, ...) and any per-type `required:` array.
+
+Two caveats before you mass-replace:
+
+- **`userTypeAlpha`** declares a richer `connections` schema than the base (nested `additionalProperties.properties.source`). The base contributes a plain `connections: {type: object, additionalProperties: {type: object}}`. To keep the richer shape, **leave the `connections` block in `properties:`** — per-type-wins precedence keeps your version and the base contributes nothing for that name. If you delete it, the type gets the simpler base shape.
+- **`postgres`** has no `connections` field today. After opting in, `connections` will appear on `postgres` because the base provides it. This is intended.
+
+#### Before → after migration
+
+**`userTypeAlpha`** — keeps the richer `connections`:
+
+```yaml
+namespace: Test.Resources
+types:
+  userTypeAlpha:
+    apiVersions:
+      "2023-10-01-preview":
+        schema:
+          type: "object"
+          allOf:
+            - $ref: "radius:base"
+          properties:
+            # Override the base connections shape with the richer per-type one.
+            connections:
+              type: object
+              additionalProperties:
+                type: object
+                properties:
+                  source:
+                    type: string
+                    description: The resourceID of the source of the connection.
+            port:
+              type: string
+              description: The port number exposed by the application.
+          required:
+            - application
+            - environment
+      "2025-01-01-preview":
+        schema:
+          type: "object"
+          allOf:
+            - $ref: "radius:base"
+          properties:
+            connections:
+              type: object
+              additionalProperties:
+                type: object
+                properties:
+                  source:
+                    type: string
+                    description: The resourceID of the source of the connection.
+          required:
+            - application
+            - environment
+```
+
+**`postgres`** — base provides app/env, the type-specific block stays:
+
+```yaml
+  postgres:
+    apiVersions:
+      "2025-01-01-preview":
+        schema:
+          type: object
+          allOf:
+            - $ref: "radius:base"
+          properties:
+            database:
+              type: string
+              description: The name of the database.
+            host:
+              type: string
+              description: The host name of the database.
+            port:
+              type: string
+              description: The port number of the database.
+            username:
+              type: string
+              description: The username for the database.
+            password:
+              type: string
+              description: The password for the database.
+```
+
+**`externalResource`** — base + `configMap` + extended `required`:
+
+```yaml
+  externalResource:
+    capabilities: ["ManualResourceProvisioning"]
+    apiVersions:
+      "2023-10-01-preview":
+        schema:
+          type: "object"
+          allOf:
+            - $ref: "radius:base"
+          properties:
+            configMap:
+              type: string
+              description: The data contained in a config map.
+          required:
+            - application
+            - environment
+            - configMap
+```
+
+Apply the same pattern to `sharedAPITestTypeA`, `sharedAPITestTypeB`, `testResourceSchema`, `testValidPlatformOptionsSchema`, and `sensitiveResource`. The mechanical rule is: delete the `application`, `environment`, and (if it matches the base shape) `connections` entries, then add `allOf: [{$ref: "radius:base"}]` at the same indentation as `properties:`.
+
+#### Verify with `rad resource-type create`
+
+```bash
+# Use your freshly built rad.
+RAD=./dist/darwin_arm64/release/rad   # adjust for your OS/arch
+$RAD version
+
+# Wipe any prior registrations so we read a clean state.
+$RAD resource-type delete Test.Resources/userTypeAlpha --yes 2>/dev/null || true
+$RAD resource-type delete Test.Resources/postgres --yes 2>/dev/null || true
+$RAD resource-type delete Test.Resources/externalResource --yes 2>/dev/null || true
+
+# Register everything in the migrated file.
+$RAD resource-type create -f test/functional-portable/dynamicrp/noncloud/resources/testdata/testresourcetypes.yaml
+```
+
+Expected: a success line per type. No `property 'environment' must be included in schema` errors and no `allOf is not supported` errors.
+
+Inspect each migrated type:
+
+```bash
+# userTypeAlpha — app/env/connections/codeReference + port
+$RAD resource-type show Test.Resources/userTypeAlpha
+
+# postgres — app/env/connections/codeReference + database/host/port/username/password
+$RAD resource-type show Test.Resources/postgres
+
+# externalResource — app/env/connections/codeReference + configMap,
+# and required: [application, environment, configMap]
+$RAD resource-type show Test.Resources/externalResource
+```
+
+Pass criteria:
+
+- All four base properties (`application`, `environment`, `connections`, `codeReference`) are present.
+- All per-type properties are present.
+- For `userTypeAlpha`, `connections.additionalProperties.properties.source` is preserved (per-type override won).
+- The `required:` array matches exactly what you wrote.
+
+Negative test in the same file — temporarily change one type's `$ref` to `radius:base/typo` and re-run `resource-type create`. You should get an error containing the type name, the API version, `radius:base/typo`, `allOf[0]`, and a hint that `radius:base` is the only supported value. Revert before continuing.
+
+#### Verify with `rad bicep publish-extension`
+
+`rad bicep publish-extension` calls the same `bicep-tools/generator` code path the feature wired through, so the four base properties appear in the generated Bicep types.
+
+```bash
+# Publish to a local tgz so you can crack it open.
+$RAD bicep publish-extension \
+  --from-file test/functional-portable/dynamicrp/noncloud/resources/testdata/testresourcetypes.yaml \
+  --target ./out/test-resources.tgz \
+  --force
+
+# Unpack.
+mkdir -p out/unpacked
+tar -xzf out/test-resources.tgz -C out/unpacked
+ls out/unpacked
+```
+
+Every `*Properties` object type emitted from a migrated resource type should declare the four base properties:
+
+```bash
+for prop in application environment connections codeReference; do
+  echo "== ${prop} =="
+  grep -l "\"${prop}\"" out/unpacked/*.json
+done
+```
+
+You should see entries for `userTypeAlphaProperties`, `postgresProperties`, `externalResourceProperties`, and so on.
+
+The `$ref` / `allOf` must be resolved away in the emitted output:
+
+```bash
+grep -E '"\$ref"|"allOf"|radius:base' out/unpacked/*.json \
+  && echo "FAIL: \$ref leaked into emitted Bicep types"
+```
+
+A clean run prints nothing and the `&&` branch is skipped.
+
+Negative test — same as for `resource-type create`: change one `$ref` to `radius:base/typo`, re-run `rad bicep publish-extension`. The command must fail with an error that includes the resource type, API version, `radius:base/typo`, `allOf[0]`, and `radius:base` as the only legal value. Revert before continuing.
+
+#### End-to-end smoke test (optional)
+
+Once both surfaces accept the migrated file, deploy a tiny Bicep template that uses the extension and instantiates one of the migrated types (e.g. `Test.Resources/userTypeAlpha`) with a `codeReference` value set. Then:
+
+```bash
+$RAD resource show Test.Resources/userTypeAlpha <name> -o json | jq '.properties'
+```
+
+The output must include `application`, `environment`, `connections`, **and** `codeReference` round-tripping the value you set. This confirms the runtime path (the `CodeReference()` accessor on the dynamic adapter) is wired correctly.
+
 ## Related links
 
 - Spec: [specs/210-base-resource-manifest/spec.md](/specs/210-base-resource-manifest/spec.md)
