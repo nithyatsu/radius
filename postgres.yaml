@@ -1,0 +1,40 @@
+# Standalone Postgres resource type — migrated to use the base resource manifest.
+#
+# This file is the worked example from
+# docs/contributing/contributing-code/contributing-code-base-resource-manifest/
+# applied to the `postgres` type from
+# test/functional-portable/dynamicrp/noncloud/resources/testdata/testresourcetypes.yaml.
+#
+# What changed vs. the original:
+#   - Removed the per-type `application` and `environment` properties.
+#   - Added `allOf: [{$ref: "radius:base"}]` to opt into the four base
+#     properties (application, environment, connections, codeReference).
+#   - Kept the type-specific properties (database, host, port, username,
+#     password) and their descriptions.
+#   - `connections` is now contributed by the base (the original did not
+#     declare it).
+namespace: Test.Resources
+types:
+  postgres:
+    apiVersions:
+      "2025-01-01-preview":
+        schema:
+          type: object
+          allOf:
+            - $ref: "radius:base"
+          properties:
+            database:
+              type: string
+              description: The name of the database.
+            host:
+              type: string
+              description: The host name of the database.
+            port:
+              type: string
+              description: The port number of the database.
+            username:
+              type: string
+              description: The username for the database.
+            password:
+              type: string
+              description: The password for the database.
