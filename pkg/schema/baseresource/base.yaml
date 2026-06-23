@@ -1,0 +1,33 @@
+# Radius Base Resource Manifest
+#
+# This file is the single source of truth for the four common Radius properties
+# that every resource type can inherit. A resource type author opts in via:
+#
+#   allOf:
+#     - $ref: "radius:base"
+#
+# in their per-type schema.
+#
+# Per FR-012 of the base resource manifest spec, the set of properties below is
+# FROZEN: future Radius releases MUST NOT add, remove, rename, or change the
+# type of a property in this file. Promoting any additional property to common
+# status requires a separate spec / mechanism, not an evolution of this base.
+#
+# Per FR-008, the reserved property names "status" and "recipe" MUST NOT appear
+# in this file.
+type: object
+properties:
+  application:
+    type: string
+    description: The resource ID of the Radius Applications.Core/applications resource this resource belongs to.
+  environment:
+    type: string
+    description: The resource ID of the Radius Applications.Core/environments resource this resource is deployed into.
+  connections:
+    type: object
+    additionalProperties:
+      type: object
+    description: The map of connection name to source resource ID for this resource.
+  codeReference:
+    type: string
+    description: An optional URI that points back to the authoring source for this resource (for example, a Git URL with commit SHA and line range).

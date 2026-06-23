@@ -1563,14 +1563,10 @@ func TestValidator_checkReservedProperties(t *testing.T) {
 		require.Error(t, err)
 		validationErrors, ok := err.(*ValidationErrors)
 		require.True(t, ok)
-		require.Len(t, validationErrors.Errors, 2) // recipe + environment
-		// Check that recipe error is present
-		errorFields := make(map[string]bool)
-		for _, ve := range validationErrors.Errors {
-			errorFields[ve.Field] = true
-		}
-		require.Contains(t, errorFields, "recipe")
-		require.Contains(t, errorFields, "environment")
+		// After the base resource manifest feature, environment is no longer
+		// globally required, so the only error here is the recipe-reserved one.
+		require.Len(t, validationErrors.Errors, 1)
+		require.Equal(t, "recipe", validationErrors.Errors[0].Field)
 		require.Contains(t, validationErrors.Errors[0].Message, "property 'recipe' is reserved and cannot be used")
 	})
 
@@ -1785,7 +1781,11 @@ func TestValidator_checkReservedProperties(t *testing.T) {
 		require.Contains(t, validationErrors.Errors[0].Message, "must be a map object (use additionalProperties)")
 	})
 
-	t.Run("environment property always required", func(t *testing.T) {
+	t.Run("environment may be omitted (was: always required)", func(t *testing.T) {
+		// Inverted from the pre-base-resource-manifest behavior. The validator no
+		// longer requires environment to appear in every schema; the base resource
+		// manifest supplies it as optional, and a per-type schema that wants it
+		// required must list it in its own required: array.
 		schema := &openapi3.Schema{
 			Type: &openapi3.Types{"object"},
 			Properties: openapi3.Schemas{
@@ -1795,18 +1795,15 @@ func TestValidator_checkReservedProperties(t *testing.T) {
 					},
 				},
 			},
-			// environment missing from properties - should always fail, regardless of Required array
+			// environment intentionally missing
 		}
 		err := validator.checkReservedProperties(schema)
-		require.Error(t, err)
-		validationErrors, ok := err.(*ValidationErrors)
-		require.True(t, ok)
-		require.Len(t, validationErrors.Errors, 1)
-		require.Equal(t, "environment", validationErrors.Errors[0].Field)
-		require.Contains(t, validationErrors.Errors[0].Message, "property 'environment' must be included in schema")
+		require.NoError(t, err)
 	})
 
-	t.Run("environment property missing from any schema should fail", func(t *testing.T) {
+	t.Run("environment may be omitted from any schema (was: should fail)", func(t *testing.T) {
+		// Inverted: a schema with neither environment nor any other reserved
+		// property in conflict is now valid.
 		schema := &openapi3.Schema{
 			Type: &openapi3.Types{"object"},
 			Properties: openapi3.Schemas{
@@ -1816,18 +1813,15 @@ func TestValidator_checkReservedProperties(t *testing.T) {
 					},
 				},
 			},
-			// No Required array, no environment property - should still fail
 		}
 		err := validator.checkReservedProperties(schema)
-		require.Error(t, err)
-		validationErrors, ok := err.(*ValidationErrors)
-		require.True(t, ok)
-		require.Len(t, validationErrors.Errors, 1)
-		require.Equal(t, "environment", validationErrors.Errors[0].Field)
-		require.Contains(t, validationErrors.Errors[0].Message, "property 'environment' must be included in schema")
+		require.NoError(t, err)
 	})
 
-	t.Run("environment property present", func(t *testing.T) {
+	t.Run("environment property present and declared required at the per-type level", func(t *testing.T) {
+		// A per-type schema that wants environment required must list it in its
+		// own required: array. This continues to work (FR-004 of the base
+		// resource manifest spec).
 		schema := &openapi3.Schema{
 			Type: &openapi3.Types{"object"},
 			Properties: openapi3.Schemas{
@@ -1895,19 +1889,19 @@ func TestValidator_checkReservedProperties(t *testing.T) {
 		}
 		err := validator.checkReservedProperties(schema)
 		require.Error(t, err)
-		// Should now collect all violations
+		// Should collect all violations. After the base resource manifest feature,
+		// environment is no longer counted as an automatic violation when absent.
 		validationErrors, ok := err.(*ValidationErrors)
 		require.True(t, ok)
-		require.Len(t, validationErrors.Errors, 3) // status, application, environment
+		require.Len(t, validationErrors.Errors, 2) // status (reserved), application (wrong type)
 
-		// Check that all errors are present
+		// Check that the expected errors are present
 		errorFields := make(map[string]bool)
 		for _, ve := range validationErrors.Errors {
 			errorFields[ve.Field] = true
 		}
 		require.Contains(t, errorFields, "status")
 		require.Contains(t, errorFields, "application")
-		require.Contains(t, errorFields, "environment")
 	})
 }
 
@@ -1942,7 +1936,10 @@ func TestValidator_ValidateSchema_MultipleErrors(t *testing.T) {
 
 		validationErrors, ok := err.(*ValidationErrors)
 		require.True(t, ok)
-		require.GreaterOrEqual(t, len(validationErrors.Errors), 4) // At least status, application, connections, environment
+		// After the base resource manifest feature, environment is no longer
+		// automatically required. Expect: status (reserved), application (wrong type),
+		// connections (wrong type) = at least 3.
+		require.GreaterOrEqual(t, len(validationErrors.Errors), 3)
 
 		t.Logf("Collected errors:\n%s", err.Error())
 	})

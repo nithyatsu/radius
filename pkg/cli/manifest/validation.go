@@ -23,6 +23,7 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/radius-project/radius/pkg/schema"
+	"github.com/radius-project/radius/pkg/schema/baseresource"
 )
 
 var (
@@ -77,6 +78,17 @@ func validateManifestSchemas(ctx context.Context, provider *ResourceProvider) er
 				openAPISchema, err := schema.ConvertToOpenAPISchema(versionInfo.Schema)
 				if err != nil {
 					errors.Add(schema.NewSchemaError(schemaPath, fmt.Sprintf("failed to parse schema: %v", err)))
+					continue
+				}
+
+				// Apply the base resource manifest: if the schema declares
+				//   allOf: [{$ref: "radius:base"}]
+				// merge the four base properties (application, environment,
+				// connections, codeReference) using per-type-wins precedence,
+				// then strip the radius: ref so the downstream validator (which
+				// does not understand custom URI schemes) sees a clean schema.
+				if err := baseresource.Apply(openAPISchema); err != nil {
+					errors.Add(schema.NewSchemaError(schemaPath, err.Error()))
 					continue
 				}
 

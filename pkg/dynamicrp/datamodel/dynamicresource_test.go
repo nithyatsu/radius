@@ -316,6 +316,55 @@ func Test_DynamicResourceBasicPropertiesAdapter_EnvironmentID(t *testing.T) {
 	}
 }
 
+func Test_DynamicResourceBasicPropertiesAdapter_CodeReference(t *testing.T) {
+	tests := []struct {
+		name     string
+		resource DynamicResource
+		want     string
+	}{
+		{
+			name:     "nil properties returns empty string",
+			resource: DynamicResource{},
+			want:     "",
+		},
+		{
+			name: "no codeReference in properties returns empty string",
+			resource: DynamicResource{
+				Properties: map[string]any{
+					"otherField": "value",
+				},
+			},
+			want: "",
+		},
+		{
+			name: "non-string codeReference in properties returns empty string",
+			resource: DynamicResource{
+				Properties: map[string]any{
+					"codeReference": 123,
+				},
+			},
+			want: "",
+		},
+		{
+			name: "valid codeReference in properties returns value",
+			resource: DynamicResource{
+				Properties: map[string]any{
+					"codeReference": "https://github.com/example/repo/blob/abc1234/app.bicep#L10-L20",
+				},
+			},
+			want: "https://github.com/example/repo/blob/abc1234/app.bicep#L10-L20",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			adapter := &dynamicResourceBasicPropertiesAdapter{resource: &tt.resource}
+			got := adapter.CodeReference()
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func Test_DynamicResource_GetComputedValues(t *testing.T) {
 	tests := []struct {
 		name     string

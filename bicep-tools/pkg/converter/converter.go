@@ -143,6 +143,15 @@ func addResourceTypeForAPIVersion(
 
 	qualifiedName := fmt.Sprintf("%s/%s@%s", provider.Namespace, resourceTypeName, apiVersionName)
 
+	// Resolve the base resource manifest opt-in before emitting types. This
+	// merges the four base properties into apiVersion.Schema if it declares
+	//   allOf: [{$ref: "radius:base"}]
+	// and strips the radius: ref so the downstream type emitter never sees an
+	// unresolved external reference.
+	if err := applyBaseResource(&apiVersion.Schema); err != nil {
+		return nil, fmt.Errorf("failed to apply base resource manifest for %s: %w", qualifiedName, err)
+	}
+
 	// Create the properties type from the schema
 	propertyTypeRef, err := addSchemaType(&apiVersion.Schema, resourceTypeName+"Properties", typeFactory)
 	if err != nil {

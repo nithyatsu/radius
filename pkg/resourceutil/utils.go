@@ -28,8 +28,11 @@ const (
 	errUnmarshalResourceProperties = "failed to unmarshal resource for properties"
 )
 
-// BasicProperties is a list of common properties that are expected to be present in all resources
-var BasicProperties = []string{"application", "environment", "status", "connections"}
+// BasicProperties is a list of common properties that are expected to be present in all resources.
+// codeReference is contributed by the base resource manifest
+// (see pkg/schema/baseresource/base.yaml) and is part of the baseline set in addition
+// to application, environment, status, and connections.
+var BasicProperties = []string{"application", "environment", "status", "connections", "codeReference"}
 
 // marshalAndUnmarshalResource serializes a resource to JSON and then deserializes it into the target structure
 func marshalAndUnmarshalResource[P any, T any](resource P, target *T) error {

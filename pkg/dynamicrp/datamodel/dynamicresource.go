@@ -220,6 +220,33 @@ func (d *dynamicResourceBasicPropertiesAdapter) EnvironmentID() string {
 	return str
 }
 
+// CodeReference returns the optional codeReference URI for this dynamic
+// resource. It is contributed by the Radius base resource manifest
+// (allOf: [{$ref: "radius:base"}]) and follows the same access pattern as
+// ApplicationID() and EnvironmentID().
+//
+// This method is intentionally not part of v1.BasicResourcePropertiesAdapter
+// because static resource types (e.g. MongoDatabase, RedisCache) do not yet
+// expose codeReference; callers that want this accessor must type-assert to
+// *dynamicResourceBasicPropertiesAdapter.
+func (d *dynamicResourceBasicPropertiesAdapter) CodeReference() string {
+	if d.resource.Properties == nil {
+		return ""
+	}
+
+	obj, ok := d.resource.Properties["codeReference"]
+	if !ok {
+		return ""
+	}
+
+	str, ok := obj.(string)
+	if !ok {
+		return ""
+	}
+
+	return str
+}
+
 // GetResourceStatus implements v1.BasicResourcePropertiesAdapter.
 func (d *dynamicResourceBasicPropertiesAdapter) GetResourceStatus() rpv1.ResourceStatus {
 	// This is the best we can do. We require all of the data we store to be JSON-marshallable,
