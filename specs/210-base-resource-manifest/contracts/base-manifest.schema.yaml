@@ -1,0 +1,71 @@
+## Contract: shape of `pkg/schema/baseresource/base.yaml`
+##
+## This contract describes what the base manifest file MUST contain.
+## The file is embedded into the Radius binary via go:embed and parsed
+## with the same openapi3 machinery already used by pkg/schema/validator.go.
+##
+## CHANGES TO THIS FILE ARE A BREAKING CHANGE to every Radius resource type.
+## The set of properties is frozen at four (spec FR-012). The shape of each
+## property is also frozen — future Radius releases MUST NOT change a
+## property's type, add a new property, or remove an existing one.
+##
+## This file is the canonical example of the contract. The real
+## pkg/schema/baseresource/base.yaml must contain exactly the four
+## properties declared below with exactly the types declared below.
+
+# JSON-Schema-style block. The validator's existing kin-openapi/openapi3
+# loader handles this shape.
+properties:
+
+  # Radius application this resource is part of, as a fully-qualified
+  # Radius resource ID. Optional at the author level (FR-002).
+  application:
+    type: string
+    description: |
+      Resource ID of the Radius Applications.Core/applications resource
+      this resource is part of. When supplied, Radius resolves the ID via
+      the existing application ID adapter (pkg/dynamicrp/datamodel/
+      dynamicresource.go::ApplicationID).
+
+  # Radius environment this resource targets, as a fully-qualified
+  # Radius resource ID. Optional at the author level (FR-002).
+  # WAS REQUIRED PRE-FEATURE — this is the documented breaking change
+  # (spec FR-006 and "Breaking Changes & Documentation Impact" section).
+  environment:
+    type: string
+    description: |
+      Resource ID of the Radius Applications.Core/environments resource
+      this resource targets. When supplied, Radius resolves the ID via
+      the existing environment ID adapter (pkg/dynamicrp/datamodel/
+      dynamicresource.go::EnvironmentID).
+
+  # Free-form map of connection name → connection source ID.
+  # Optional at the author level (FR-002).
+  connections:
+    type: object
+    additionalProperties:
+      type: object
+    description: |
+      Map of connection name to connection definition. Each entry's value
+      is the source resource the connection points at. Radius extracts
+      this map via pkg/resourceutil/utils.go::GetConnectionNameandSourceIDs.
+
+  # NEW IN THIS FEATURE. Optional string treated as a URI by tooling
+  # but not enforced as a URI by the validator (FR-005 / research.md
+  # Decision 4). Structured form is a future additive change.
+  codeReference:
+    type: string
+    description: |
+      Optional URI pointing back to the authoring source for this resource
+      (e.g. a Git URL with commit SHA and line range). Validated as a
+      string only. Tooling MAY render as a clickable link when the value
+      parses as an HTTP(S) URL.
+
+# IMPORTANT: this contract intentionally does NOT include a top-level
+# `required:` array. The base manifest contributes NO entries to the
+# effective schema's `required:` array — per-type schemas drive
+# requiredness exclusively (data-model.md composition rule step 3).
+
+# IMPORTANT: this contract intentionally does NOT declare `status` or
+# `recipe`. Those remain reserved-and-forbidden in all schemas
+# including the base (spec FR-008).

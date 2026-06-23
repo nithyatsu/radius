@@ -494,4 +494,96 @@ func TestValidateManifestSchemas(t *testing.T) {
 		require.True(t, validationErrors.HasErrors())
 		require.Len(t, validationErrors.Errors, 2)
 	})
+
+	t.Run("provider that opts into the base resource manifest via allOf $ref", func(t *testing.T) {
+		// FR-001: a per-type schema that declares allOf: [{$ref: "radius:base"}]
+		// should validate successfully. The four base properties (application,
+		// environment, connections, codeReference) are merged into the schema
+		// before the downstream validator runs, and the radius: $ref entry is
+		// stripped so the validator does not reject the unknown URI scheme.
+		provider := &ResourceProvider{
+			Namespace: "Test.Provider",
+			Types: map[string]*ResourceType{
+				"widgets": {
+					APIVersions: map[string]*ResourceTypeAPIVersion{
+						"2023-10-01": {
+							Schema: map[string]any{
+								"type": "object",
+								"allOf": []map[string]any{
+									{"$ref": "radius:base"},
+								},
+								"properties": map[string]any{
+									"size": map[string]any{"type": "string"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		err := validateManifestSchemas(ctx, provider)
+		require.NoError(t, err)
+	})
+
+	t.Run("provider with per-type override of a base property (per-type-wins)", func(t *testing.T) {
+		// FR-004: a per-type schema may redeclare a base property to narrow or
+		// document it. The per-type declaration wins; the base contributes
+		// nothing for that name.
+		provider := &ResourceProvider{
+			Namespace: "Test.Provider",
+			Types: map[string]*ResourceType{
+				"widgets": {
+					APIVersions: map[string]*ResourceTypeAPIVersion{
+						"2023-10-01": {
+							Schema: map[string]any{
+								"type": "object",
+								"allOf": []map[string]any{
+									{"$ref": "radius:base"},
+								},
+								"properties": map[string]any{
+									"environment": map[string]any{
+										"type":        "string",
+										"description": "Narrowed by the per-type schema.",
+									},
+								},
+								"required": []string{"environment"},
+							},
+						},
+					},
+				},
+			},
+		}
+		err := validateManifestSchemas(ctx, provider)
+		require.NoError(t, err)
+	})
+
+	t.Run("provider with unsupported radius URI in allOf", func(t *testing.T) {
+		// FR-007: any radius: URI other than the exact value "radius:base"
+		// must produce an actionable error scoped to the per-type schema path.
+		provider := &ResourceProvider{
+			Namespace: "Test.Provider",
+			Types: map[string]*ResourceType{
+				"widgets": {
+					APIVersions: map[string]*ResourceTypeAPIVersion{
+						"2023-10-01": {
+							Schema: map[string]any{
+								"type": "object",
+								"allOf": []map[string]any{
+									{"$ref": "radius:base/something"},
+								},
+								"properties": map[string]any{
+									"size": map[string]any{"type": "string"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		err := validateManifestSchemas(ctx, provider)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "Test.Provider/widgets@2023-10-01")
+		require.Contains(t, err.Error(), "radius:base/something")
+		require.Contains(t, err.Error(), "radius:base")
+	})
 }

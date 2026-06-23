@@ -39,6 +39,17 @@ type Schema struct {
 	Items                *Schema           `yaml:"items,omitempty" json:"items,omitempty"`
 	Enum                 []string          `yaml:"enum,omitempty" json:"enum,omitempty"`
 	IsSensitive          *bool             `yaml:"x-radius-sensitive,omitempty" json:"x-radius-sensitive,omitempty"`
+	// AllOf carries the JSON Schema allOf composition keyword. The Radius base
+	// resource manifest opt-in is expressed as
+	//   allOf:
+	//     - $ref: "radius:base"
+	// See pkg/converter/baseresource.go for how this list is consumed by the
+	// Bicep type generator.
+	AllOf []Schema `yaml:"allOf,omitempty" json:"allOf,omitempty"`
+	// Ref carries the JSON Schema $ref keyword. The Bicep type generator only
+	// recognizes the custom URI "radius:base"; any other value produces an
+	// error.
+	Ref string `yaml:"$ref,omitempty" json:"$ref,omitempty"`
 }
 
 // ParseManifest parses a YAML manifest string into a ResourceProvider struct

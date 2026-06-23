@@ -38,3 +38,7 @@ VS Code users additionally have slash-command **prompts** in [.github/prompts/](
 ## 7. How to contribute
 
 Read [CONTRIBUTING.md](/CONTRIBUTING.md) for the contribution process, the Developer Certificate of Origin sign-off requirement, and links to the issue and pull-request guides. New contributors should follow the [first commit walkthrough](/docs/contributing/contributing-code/contributing-code-first-commit/).
+
+<!-- SPECKIT START -->
+**Active Spec Kit plan**: [specs/210-base-resource-manifest/plan.md](/specs/210-base-resource-manifest/plan.md) — Base Resource Manifest. Ships Approach A only (`allOf: [{ $ref: "radius:base" }]` keyword in per-type YAML); Approach B (implicit injection) is preserved as a possible future POC. See [spec.md](/specs/210-base-resource-manifest/spec.md) for requirements and [quickstart.md](/specs/210-base-resource-manifest/quickstart.md) to demo.
+<!-- SPECKIT END -->
