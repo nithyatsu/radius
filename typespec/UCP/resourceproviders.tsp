@@ -105,6 +105,13 @@ model ResourceTypeProperties {
 
   @doc("Description of the resource type.")
   description?: string;
+
+  @doc("The verbatim SVG file content of the icon associated with the resource type, carried as a UTF-8 string. Set by 'rad resource-type create --icon <path>'.")
+  icon?: string;
+
+  @doc("The SHA-256 hash of the icon's SVG bytes. Computed by the control plane and used to content-address the icon.")
+  @visibility(Lifecycle.Read)
+  iconHash?: string;
 }
 
 @doc("The resource type for defining an API version of a resource type supported by the containing resource provider.")

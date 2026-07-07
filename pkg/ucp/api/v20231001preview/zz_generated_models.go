@@ -680,6 +680,13 @@ type ResourceTypeProperties struct {
 	// Description of the resource type.
 	Description *string
 
+	// The verbatim SVG file content of the icon associated with the resource type, carried as a UTF-8 string. Set by 'rad resource-type
+	// create --icon <path>'.
+	Icon *string
+
+	// READ-ONLY; The SHA-256 hash of the icon's SVG bytes. Computed by the control plane and used to content-address the icon.
+	IconHash *string
+
 	// READ-ONLY; The status of the asynchronous operation.
 	ProvisioningState *ProvisioningState
 }

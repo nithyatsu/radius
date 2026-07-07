@@ -214,7 +214,7 @@ func TestRegisterType(t *testing.T) {
 			clientFactory := createTestClientFactory(t)
 			logger, logBuffer := createTestLogger()
 
-			err := RegisterType(context.Background(), clientFactory, tt.planeName, tt.filePath, tt.resourceTypeName, logger)
+			err := RegisterType(context.Background(), clientFactory, tt.planeName, tt.filePath, tt.resourceTypeName, "", logger)
 			if tt.expectError {
 				require.Error(t, err)
 				require.Contains(t, err.Error(), tt.expectedErrorMessage)
@@ -924,7 +924,7 @@ func TestRegisterType_ErrorScenarios(t *testing.T) {
 			logger, _ := createTestLogger()
 
 			testErrorScenario(t, func() error {
-				return RegisterType(context.Background(), clientFactory, "local", tt.filePath, tt.typeName, logger)
+				return RegisterType(context.Background(), clientFactory, "local", tt.filePath, tt.typeName, "", logger)
 			}, tt.expectError, tt.expectedErrorMessage)
 		})
 	}
