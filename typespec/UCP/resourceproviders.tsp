@@ -196,6 +196,12 @@ model ResourceProviderSummaryResourceType {
 
   @doc("Description of the resource type.")
   description?: string;
+
+  @doc("The verbatim SVG icon content associated with the resource type, carried as a UTF-8 string.")
+  icon?: string;
+
+  @doc("The SHA-256 hash of the icon's SVG bytes, computed by the control plane.")
+  iconHash?: string;
 }
 
 @doc("The configuration of a resource type API version.")
@@ -301,6 +307,10 @@ interface ResourceProviders {
     @path
     @segment("providers")
     resourceProviderName: ResourceProviderNamespaceString,
+
+    @doc("When true, resource type icon bytes are included in the response. When false or omitted, only the icon hash is returned.")
+    @query
+    includeIcons?: boolean,
   ): ArmResponse<ResourceProviderSummary> | ErrorResponse;
 }
 

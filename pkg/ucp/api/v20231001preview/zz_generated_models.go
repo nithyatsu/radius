@@ -667,6 +667,12 @@ type ResourceProviderSummaryResourceType struct {
 
 	// Description of the resource type.
 	Description *string
+
+	// The verbatim SVG icon content associated with the resource type, carried as a UTF-8 string.
+	Icon *string
+
+	// The SHA-256 hash of the icon's SVG bytes, computed by the control plane.
+	IconHash *string
 }
 
 // ResourceTypeProperties - The properties of a resource type.

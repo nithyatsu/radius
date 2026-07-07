@@ -38,7 +38,7 @@ func NewCommand(factory framework.Factory) (*cobra.Command, framework.Runner) {
 		Use:   "show [resource type]",
 		Short: "Show resource resource type",
 		Long: `Show resource resource type
-		
+
 Resource types are the entities that can be created and managed by Radius such as 'Applications.Core/containers'. Each resource type can define multiple API versions, and each API version defines a schema that resource instances conform to. Resource types can be configured using resource providers.`,
 		Example: `
 # Show a resource type
@@ -49,6 +49,7 @@ rad resource-type show 'Applications.Core/containers'`,
 
 	commonflags.AddOutputFlag(cmd)
 	commonflags.AddWorkspaceFlag(cmd)
+	cmd.Flags().BoolVar(&runner.IncludeIcons, "include-icons", false, "Include the resource type's icon bytes in the output. When omitted, only the icon hash is shown.")
 
 	return cmd, runner
 }
@@ -64,6 +65,9 @@ type Runner struct {
 	ResourceTypeName          string
 	ResourceProviderNamespace string
 	ResourceTypeSuffix        string
+
+	// IncludeIcons requests the resource type's icon bytes in addition to the hash.
+	IncludeIcons bool
 }
 
 // NewRunner creates an instance of the runner for the `rad resource-type show` command.
@@ -109,7 +113,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		r.UCPClientFactory = clientFactory
 	}
 
-	resourceTypeDetails, err := common.GetResourceTypeDetails(ctx, r.ResourceProviderNamespace, r.ResourceTypeSuffix, r.UCPClientFactory)
+	resourceTypeDetails, err := common.GetResourceTypeDetails(ctx, r.ResourceProviderNamespace, r.ResourceTypeSuffix, r.UCPClientFactory, r.IncludeIcons)
 	if err != nil {
 		return err
 	}

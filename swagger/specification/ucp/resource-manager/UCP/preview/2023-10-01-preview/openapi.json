@@ -1422,6 +1422,13 @@
             "type": "string",
             "maxLength": 63,
             "pattern": "^([A-Za-z]([-A-Za-z0-9]*[A-Za-z0-9]))\\.([A-Za-z]([-A-Za-z0-9]*[A-Za-z0-9]))?$"
+          },
+          {
+            "name": "includeIcons",
+            "in": "query",
+            "description": "When true, resource type icon bytes are included in the response. When false or omitted, only the icon hash is returned.",
+            "required": false,
+            "type": "boolean"
           }
         ],
         "responses": {
@@ -3993,6 +4000,14 @@
         "description": {
           "type": "string",
           "description": "Description of the resource type."
+        },
+        "icon": {
+          "type": "string",
+          "description": "The verbatim SVG icon content associated with the resource type, carried as a UTF-8 string."
+        },
+        "iconHash": {
+          "type": "string",
+          "description": "The SHA-256 hash of the icon's SVG bytes, computed by the control plane."
         }
       },
       "required": [
@@ -4028,6 +4043,15 @@
         "description": {
           "type": "string",
           "description": "Description of the resource type."
+        },
+        "icon": {
+          "type": "string",
+          "description": "The verbatim SVG file content of the icon associated with the resource type, carried as a UTF-8 string. Set by 'rad resource-type create --icon <path>'."
+        },
+        "iconHash": {
+          "type": "string",
+          "description": "The SHA-256 hash of the icon's SVG bytes. Computed by the control plane and used to content-address the icon.",
+          "readOnly": true
         }
       }
     },
