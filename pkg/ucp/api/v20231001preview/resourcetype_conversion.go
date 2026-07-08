@@ -65,7 +65,11 @@ func (src *ResourceTypeResource) ConvertTo() (v1.DataModelInterface, error) {
 	// the bytes that were stored.
 	dst.Properties.Icon = src.Properties.Icon
 	if src.Properties.Icon != nil {
-		sum := sha256.Sum256([]byte(*src.Properties.Icon))
+		iconBytes := []byte(*src.Properties.Icon)
+		if err := datamodel.ValidateIcon(iconBytes); err != nil {
+			return nil, v1.NewClientErrInvalidRequest(fmt.Sprintf("invalid icon: %s", err.Error()))
+		}
+		sum := sha256.Sum256(iconBytes)
 		dst.Properties.IconHash = to.Ptr(hex.EncodeToString(sum[:]))
 	}
 

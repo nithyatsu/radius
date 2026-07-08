@@ -158,6 +158,44 @@ func Test_ResourceType_Icon_VersionedToDataModel(t *testing.T) {
 	})
 }
 
+func Test_ResourceType_ConvertTo_RejectsInvalidIcon(t *testing.T) {
+	tests := []struct {
+		name    string
+		icon    string
+		wantErr string
+	}{
+		{
+			name:    "not svg",
+			icon:    "<html><body/></html>",
+			wantErr: "invalid icon",
+		},
+		{
+			name:    "script element",
+			icon:    `<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>`,
+			wantErr: "invalid icon",
+		},
+		{
+			name:    "event handler",
+			icon:    `<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"/>`,
+			wantErr: "invalid icon",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			versioned := &ResourceTypeResource{
+				ID:   to.Ptr("/planes/radius/local/providers/System.Resources/resourceProviders/Applications.Test/resourceTypes/testResources"),
+				Name: to.Ptr("testResources"),
+				Properties: &ResourceTypeProperties{
+					Icon: to.Ptr(tc.icon),
+				},
+			}
+			_, err := versioned.ConvertTo()
+			require.Error(t, err)
+			require.Contains(t, err.Error(), tc.wantErr)
+		})
+	}
+}
+
 func Test_ResourceType_Icon_DataModelToVersioned(t *testing.T) {
 	dm := &datamodel.ResourceType{
 		BaseResource: v1.BaseResource{

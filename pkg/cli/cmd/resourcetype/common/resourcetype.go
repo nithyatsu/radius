@@ -36,10 +36,6 @@ type ResourceType struct {
 	ResourceProviderNamespace string
 	// APIVersions is the list of API versions supported by the resource type.
 	APIVersions map[string]*APIVersionProperties
-	// Icon is the verbatim SVG icon content associated with the resource type.
-	Icon string
-	// IconHash is the SHA-256 hash of the icon's SVG bytes, computed by the control plane.
-	IconHash string
 }
 
 // APIVersionProperties is used to store the schema of the resource type for the api version.
@@ -66,14 +62,6 @@ func ResourceTypesForProvider(provider *v20231001preview.ResourceProviderSummary
 
 		if resourceType.Description != nil {
 			rt.Description = *resourceType.Description
-		}
-
-		if resourceType.Icon != nil {
-			rt.Icon = *resourceType.Icon
-		}
-
-		if resourceType.IconHash != nil {
-			rt.IconHash = *resourceType.IconHash
 		}
 
 		rt.APIVersions = make(map[string]*APIVersionProperties)
@@ -144,17 +132,11 @@ func GetResourceTypeShowSchemaTableFormat() output.FormatterOptions {
 }
 
 // GetResourceTypeDetails retrieves the details of a resource provider's resource type using the UCP client.
-// It returns the resource type details or an error if the resource type is not found. When includeIcons
-// is true, the resource type's icon bytes are requested; otherwise only the icon hash is returned.
-func GetResourceTypeDetails(ctx context.Context, resourceProviderName string, resourceTypeName string, clientFactory *v20231001preview.ClientFactory, includeIcons bool) (ResourceType, error) {
+// It returns the resource type details or an error if the resource type is not found.
+func GetResourceTypeDetails(ctx context.Context, resourceProviderName string, resourceTypeName string, clientFactory *v20231001preview.ClientFactory) (ResourceType, error) {
 	fullyQualifiedResourceType := resourceProviderName + "/" + resourceTypeName
 
-	options := &v20231001preview.ResourceProvidersClientGetProviderSummaryOptions{}
-	if includeIcons {
-		options.IncludeIcons = &includeIcons
-	}
-
-	response, err := clientFactory.NewResourceProvidersClient().GetProviderSummary(ctx, "local", resourceProviderName, options)
+	response, err := clientFactory.NewResourceProvidersClient().GetProviderSummary(ctx, "local", resourceProviderName, nil)
 	if clients.Is404Error(err) {
 		return ResourceType{}, clierrors.Message("The resource type %q does not exist.", fullyQualifiedResourceType)
 	} else if err != nil {

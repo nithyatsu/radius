@@ -20,9 +20,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/radius-project/radius/pkg/cli/manifest"
-	"github.com/radius-project/radius/pkg/ucp/api/v20231001preview"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -35,7 +33,7 @@ func Test_GetResourceTypeDetails(t *testing.T) {
 		clientFactory, err := manifest.NewTestClientFactory(manifest.WithResourceProviderServerNoError)
 		require.NoError(t, err)
 
-		res, err := GetResourceTypeDetails(context.Background(), "MyCompany.Resources", "testResources", clientFactory, false)
+		res, err := GetResourceTypeDetails(context.Background(), "MyCompany.Resources", "testResources", clientFactory)
 		require.NoError(t, err)
 		require.Equal(t, "MyCompany.Resources/testResources", res.Name)
 
@@ -48,7 +46,7 @@ func Test_GetResourceTypeDetails(t *testing.T) {
 		clientFactory, err := manifest.NewTestClientFactory(manifest.WithResourceProviderServerNotFoundError)
 		require.NoError(t, err)
 
-		_, err = GetResourceTypeDetails(context.Background(), "MyCompany.Resources", "testResources", clientFactory, false)
+		_, err = GetResourceTypeDetails(context.Background(), "MyCompany.Resources", "testResources", clientFactory)
 		require.Error(t, err)
 		require.Equal(t, "The resource type \"MyCompany.Resources/testResources\" does not exist.", err.Error())
 	})
@@ -60,7 +58,7 @@ func Test_GetResourceTypeDetails(t *testing.T) {
 		clientFactory, err := manifest.NewTestClientFactory(manifest.WithResourceProviderServerNoError)
 		require.NoError(t, err)
 
-		_, err = GetResourceTypeDetails(context.Background(), "MyCompany.Resources", "missingResources", clientFactory, false)
+		_, err = GetResourceTypeDetails(context.Background(), "MyCompany.Resources", "missingResources", clientFactory)
 		require.Error(t, err)
 		require.Equal(t, "The resource type \"MyCompany.Resources/missingResources\" does not exist.", err.Error())
 	})
@@ -72,32 +70,7 @@ func Test_GetResourceTypeDetails(t *testing.T) {
 		clientFactory, err := manifest.NewTestClientFactory(manifest.WithResourceProviderServerInternalError)
 		require.NoError(t, err)
 
-		_, err = GetResourceTypeDetails(context.Background(), "MyCompany.Resources", "testResources", clientFactory, false)
+		_, err = GetResourceTypeDetails(context.Background(), "MyCompany.Resources", "testResources", clientFactory)
 		require.Error(t, err)
 	})
-}
-
-func Test_ResourceTypesForProvider_Icon(t *testing.T) {
-	summary := &v20231001preview.ResourceProviderSummary{
-		Name: to.Ptr("MyCompany.Resources"),
-		ResourceTypes: map[string]*v20231001preview.ResourceProviderSummaryResourceType{
-			"withIcon": {
-				Icon:     to.Ptr(`<svg/>`),
-				IconHash: to.Ptr("cafebabe"),
-			},
-			"withoutIcon": {},
-		},
-	}
-
-	result := ResourceTypesForProvider(summary)
-
-	byName := map[string]ResourceType{}
-	for _, rt := range result {
-		byName[rt.Name] = rt
-	}
-
-	require.Equal(t, `<svg/>`, byName["MyCompany.Resources/withIcon"].Icon)
-	require.Equal(t, "cafebabe", byName["MyCompany.Resources/withIcon"].IconHash)
-	require.Empty(t, byName["MyCompany.Resources/withoutIcon"].Icon)
-	require.Empty(t, byName["MyCompany.Resources/withoutIcon"].IconHash)
 }

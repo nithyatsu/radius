@@ -105,10 +105,6 @@ const (
 func (r *Runner) display(resourceTypeDetails *common.ResourceType) error {
 	r.Output.LogInfo("\nDESCRIPTION:")
 	r.Output.LogInfo("%s", resourceTypeDetails.Description)
-	if resourceTypeDetails.IconHash != "" {
-		r.Output.LogInfo("\nICON:")
-		r.Output.LogInfo("hash: %s", resourceTypeDetails.IconHash)
-	}
 	for apiVersion, apiVersionProperties := range resourceTypeDetails.APIVersions {
 		r.Output.LogInfo("API VERSION: %s\n", apiVersion)
 		propertyTitleStatus := PropertyTitleNone

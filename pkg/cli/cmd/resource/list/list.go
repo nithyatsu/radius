@@ -154,7 +154,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		r.UCPClientFactory = clientFactory
 	}
 
-	_, err := common.GetResourceTypeDetails(ctx, r.ResourceProviderNamespace, r.ResourceTypeSuffix, r.UCPClientFactory, false)
+	_, err := common.GetResourceTypeDetails(ctx, r.ResourceProviderNamespace, r.ResourceTypeSuffix, r.UCPClientFactory)
 	if err != nil {
 		return err
 	}

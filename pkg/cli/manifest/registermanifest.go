@@ -30,6 +30,7 @@ import (
 	"github.com/radius-project/radius/pkg/cli/clients"
 	"github.com/radius-project/radius/pkg/to"
 	"github.com/radius-project/radius/pkg/ucp/api/v20231001preview"
+	"github.com/radius-project/radius/pkg/ucp/datamodel"
 )
 
 const (
@@ -235,6 +236,9 @@ func RegisterType(ctx context.Context, clientFactory *v20231001preview.ClientFac
 		bytes, err := os.ReadFile(iconFilePath)
 		if err != nil {
 			return fmt.Errorf("failed to read icon file %s: %w", iconFilePath, err)
+		}
+		if err := datamodel.ValidateIcon(bytes); err != nil {
+			return fmt.Errorf("invalid icon file %s: %w", iconFilePath, err)
 		}
 		icon = to.Ptr(string(bytes))
 	}
