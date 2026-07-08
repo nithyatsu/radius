@@ -930,6 +930,20 @@ func TestRegisterType_ErrorScenarios(t *testing.T) {
 	}
 }
 
+func TestRegisterType_IconFileNotFound(t *testing.T) {
+	t.Parallel()
+
+	clientFactory := createTestClientFactory(t)
+	logger, _ := createTestLogger()
+
+	err := RegisterType(context.Background(), clientFactory, "local",
+		"testdata/registerdirectory/resourceprovider-valid2.yaml", "testResource3",
+		"testdata/nonexistent-icon.svg", logger)
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "failed to read icon file testdata/nonexistent-icon.svg")
+}
+
 func TestRegisterFile_ErrorScenarios(t *testing.T) {
 	t.Parallel()
 

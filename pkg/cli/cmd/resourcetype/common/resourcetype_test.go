@@ -20,7 +20,9 @@ import (
 	"context"
 	"testing"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/radius-project/radius/pkg/cli/manifest"
+	"github.com/radius-project/radius/pkg/ucp/api/v20231001preview"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -73,4 +75,29 @@ func Test_GetResourceTypeDetails(t *testing.T) {
 		_, err = GetResourceTypeDetails(context.Background(), "MyCompany.Resources", "testResources", clientFactory, false)
 		require.Error(t, err)
 	})
+}
+
+func Test_ResourceTypesForProvider_Icon(t *testing.T) {
+	summary := &v20231001preview.ResourceProviderSummary{
+		Name: to.Ptr("MyCompany.Resources"),
+		ResourceTypes: map[string]*v20231001preview.ResourceProviderSummaryResourceType{
+			"withIcon": {
+				Icon:     to.Ptr(`<svg/>`),
+				IconHash: to.Ptr("cafebabe"),
+			},
+			"withoutIcon": {},
+		},
+	}
+
+	result := ResourceTypesForProvider(summary)
+
+	byName := map[string]ResourceType{}
+	for _, rt := range result {
+		byName[rt.Name] = rt
+	}
+
+	require.Equal(t, `<svg/>`, byName["MyCompany.Resources/withIcon"].Icon)
+	require.Equal(t, "cafebabe", byName["MyCompany.Resources/withIcon"].IconHash)
+	require.Empty(t, byName["MyCompany.Resources/withoutIcon"].Icon)
+	require.Empty(t, byName["MyCompany.Resources/withoutIcon"].IconHash)
 }
