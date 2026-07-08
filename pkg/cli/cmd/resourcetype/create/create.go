@@ -132,6 +132,10 @@ func (r *Runner) Validate(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	if r.IconFilePath != "" && r.ResourceTypeName == "" && len(resourcesTypes) > 1 {
+		return clierrors.Message("The --icon flag can only be used with a single resource type. When the manifest defines multiple types, specify a single type to register: rad resource-type create <typeName> --from-file <file> --icon <path>")
+	}
+
 	return nil
 }
 
