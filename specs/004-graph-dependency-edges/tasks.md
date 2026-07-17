@@ -139,7 +139,7 @@ Single Go module `github.com/radius-project/radius`; feature-specific paths per 
 
 - [ ] T019 [US4] Run `go list -deps ./pkg/graph/edges/... | grep -E 'pkg/cli|pkg/corerp|net/http'`. Expected output: empty. If not empty, refactor to remove the offending imports.
 - [ ] T020 [US4] Add a doc-comment block on `ExtractEdges` in `pkg/graph/edges/edges.go` naming the Phase 2 plug-in point:
-  > "Runtime callers (Phase 2) populate `Resource.DependsOn` by scanning stored properties for canonical resource IDs before calling this function. Static callers populate it from Bicep's `dependsOn` array via `resolveDependsOn`. The extractor is agnostic to how `DependsOn` was resolved."
+  > "Runtime callers (Phase 2) populate `Resource.DependsOn` from caller-supplied `dependsOnEdges` on the `GetGraphRequest` wire, not from server-side property scanning. Static callers populate it from Bicep's `dependsOn` array via `resolveDependsOn`. The extractor is agnostic to how `DependsOn` was resolved."
 
 **Checkpoint (US4)**: Runtime plug-in is documented and structurally supported. Phase 2 becomes a wiring change.
 

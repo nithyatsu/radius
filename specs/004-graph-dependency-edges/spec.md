@@ -76,7 +76,7 @@ The `Radius.Core/applications/rabbitmq-app` node is **not present** in the resou
 
 - Wire model: `ApplicationGraphConnection` on `Radius.Core/2025-08-01-preview` gains a `kind` field. `Applications.Core` is unchanged.
 - Static graph builder: emits `Connection` and `Dependency` edges into the new field.
-- Runtime graph handler (Radius.Core preview): sets `kind: Connection` on every edge it emits. No `Dependency` edges yet — the runtime doesn't have `dependsOn` and property-scan is Phase 2.
+- Runtime graph handler (Radius.Core preview): sets `kind: Connection` on every edge it emits. No `Dependency` edges yet — the runtime doesn't have `dependsOn`, and Phase 2 will surface them by extending the `GetGraphRequest` wire to accept caller-supplied `dependsOnEdges`.
 - Runtime graph handler (`Applications.Core`): untouched.
 
 **Phase 2 (follow-up, out of scope for this spec): runtime dependency extraction.**
@@ -218,7 +218,7 @@ The runtime graph handler (Phase 2) reuses the same connection-resolution, depen
 ### Wire contract
 
 - **FR-013**: `ApplicationGraphConnection` on the `Radius.Core/2025-08-01-preview` TypeSpec MUST gain a `kind` field with values `Connection` (author-declared, from `properties.connections`) and `Dependency` (implicit, from `dependsOn`). The field is required on the response — every emitted edge carries a `kind`. Field name and enum name (working name: `ConnectionKind`) are firmed up during `speckit.plan`.
-- **FR-014**: The `Radius.Core/2025-08-01-preview` runtime graph handler (`pkg/corerp/frontend/controller/applications/v20250801preview/graph_util.go`) MUST set `kind: Connection` on every edge it emits. It does **not** produce `Dependency` edges in Phase 1 — property-scan for runtime dependencies is Phase 2.
+- **FR-014**: The `Radius.Core/2025-08-01-preview` runtime graph handler (`pkg/corerp/frontend/controller/applications/v20250801preview/graph_util.go`) MUST set `kind: Connection` on every edge it emits. It does **not** produce `Dependency` edges in Phase 1 — caller-supplied `dependsOnEdges` on `GetGraphRequest` is Phase 2.
 - **FR-015**: The static graph builder MUST set `kind` on every edge — `Connection` or `Dependency` — including mirrored inbound edges.
 - **FR-016**: `Applications.Core` TypeSpec, generated code, handlers, and tests MUST NOT change. The wire change is scoped to `Radius.Core/2025-08-01-preview` only.
 
@@ -256,7 +256,7 @@ The runtime graph handler (Phase 2) reuses the same connection-resolution, depen
 - Radius resources are addressable by canonical resource ID and every graph node in scope carries one.
 - `bicep build` continues to emit `dependsOn` for every literal-argument `.id` reference. This is Microsoft's documented behavior ([Azure Resource Manager: resource dependencies](https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/resource-dependencies)) and is already relied on by `DiffHash`.
 - `properties.connections[*].source` continues to be an ARM expression resolvable to a canonical resource ID via `collectResources` / `rewriteSymbolicConnections`.
-- The runtime graph's edge extractor is intentionally simpler than the static one because deployed resources do not carry `dependsOn`; runtime `Dependency` extraction (Phase 2) will scan authored `properties` strings.
+- The runtime graph's edge extractor is intentionally simpler than the static one because deployed resources do not carry `dependsOn`. Runtime `Dependency` extraction (Phase 2) does not attempt to reconstruct `dependsOn` on the server; instead, the `GetGraphRequest` wire grows an optional `dependsOnEdges` field that callers (typically `rad app graph -a <app>` after a fresh `bicep build`, or the deployment engine) supply. The server merges those edges into the connection-only graph it already builds. No property scanning on stored resources.
 - The `kind` field on Radius.Core preview is additive; consumers that do not read it continue to work. Consumers that opt in (renderers, troubleshooting tools) can differentiate `Connection` vs `Dependency`.
 - `Applications.Core` API versions are frozen for this feature.
 
@@ -264,7 +264,7 @@ The runtime graph handler (Phase 2) reuses the same connection-resolution, depen
 
 Tracked separately once Phase 1 lands:
 
-1. **Runtime `Dependency` extraction.** Scan stored `properties` on each resource (post-exclusion) for canonical IDs that resolve to nodes in the resource list. Emit `Dependency` edges via the shared primitives from FR-017. Applies to the `Radius.Core/2025-08-01-preview` runtime handler only.
+1. **Caller-supplied `dependsOnEdges` on the runtime API.** Extend `GetGraphRequest` on `Radius.Core/2025-08-01-preview` with an optional `dependsOnEdges` field. Clients that have just compiled a Bicep template pass the extracted edges to the server; the server tags them `Kind: Dependency` and merges them into the graph it builds from stored resources via the shared primitives (FR-017), applying the same Connection-wins de-dup and reciprocal mirroring. Explicitly not a server-side property scanner — the authoritative source of `dependsOn` is Bicep's compiled template, held by the caller.
 2. **Runtime exclusion list.** Apply the same `Radius.Core/*` exclusion in the `Radius.Core/2025-08-01-preview` runtime graph handler.
 3. **Renderer visual treatment.** Update CLI and dashboard renderers to render `Dependency` edges distinctly from `Connection` edges (dotted vs solid line, legend, etc.).
 4. **Additional `Radius.Core/*` types.** As new control-plane types are added, extend the exclusion list. Every extension is one line of code + one test case (SC-005).
