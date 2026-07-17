@@ -166,7 +166,14 @@ func convertConnections(in []*corerpv20231001preview.ApplicationGraphConnection)
 		if c == nil {
 			continue
 		}
-		converted := &corerpv20250801preview.ApplicationGraphConnection{ID: c.ID}
+		// Every edge produced by the runtime graph is a Connection in
+		// Phase 1. Dependency edges are surfaced only on the static graph
+		// (Bicep dependsOn); runtime dependency extraction is Phase 2 and
+		// arrives via caller-supplied dependsOnEdges on GetGraphRequest.
+		converted := &corerpv20250801preview.ApplicationGraphConnection{
+			ID:   c.ID,
+			Kind: to.Ptr(corerpv20250801preview.ConnectionKindConnection),
+		}
 		if c.Direction != nil {
 			converted.Direction = to.Ptr(corerpv20250801preview.Direction(*c.Direction))
 		}
