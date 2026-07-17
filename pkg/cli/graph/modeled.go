@@ -302,6 +302,10 @@ func outboundConnections(properties map[string]any) []*corerpv20250801preview.Ap
 		result = append(result, &corerpv20250801preview.ApplicationGraphConnection{
 			ID:        to.Ptr(resolved),
 			Direction: to.Ptr(corerpv20250801preview.DirectionOutbound),
+			// Every edge produced from properties.connections is a
+			// Connection. Dependency edges (from Bicep dependsOn) are
+			// added by a separate pass in a later commit.
+			Kind: to.Ptr(corerpv20250801preview.ConnectionKindConnection),
 		})
 	}
 	return result
@@ -336,6 +340,10 @@ func addInboundConnections(graph *corerpv20250801preview.ApplicationGraphRespons
 			dest.Connections = append(dest.Connections, &corerpv20250801preview.ApplicationGraphConnection{
 				ID:        src.ID,
 				Direction: to.Ptr(corerpv20250801preview.DirectionInbound),
+				// Mirror preserves the source edge's Kind. Connection is
+				// the only Kind emitted today; when Dependency edges are
+				// added, this mirror will need to carry the source's Kind.
+				Kind: to.Ptr(corerpv20250801preview.ConnectionKindConnection),
 			})
 		}
 	}
