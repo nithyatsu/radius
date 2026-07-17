@@ -39,9 +39,15 @@ func TestBuildModeledGraph_SkipsContainersAndRecipePacks(t *testing.T) {
 
 	template := map[string]any{
 		"resources": []any{
+			// Applications.Core (legacy) scope resources — excluded.
 			map[string]any{"type": "Applications.Core/applications", "name": "myapp"},
 			map[string]any{"type": "Applications.Core/environments", "name": "myenv"},
+			// Radius.Core (new) scope resources — also excluded per FR-005.
+			map[string]any{"type": "Radius.Core/applications", "name": "myapp2"},
+			map[string]any{"type": "Radius.Core/environments", "name": "myenv2"},
+			// Radius.Core catalog resource — excluded.
 			map[string]any{"type": "Radius.Core/recipePacks", "name": "mypack"},
+			// Only this container should survive as a graph node.
 			map[string]any{"type": "Applications.Core/containers", "name": "frontend",
 				"properties": map[string]any{"image": "nginx"}},
 		},
@@ -52,6 +58,68 @@ func TestBuildModeledGraph_SkipsContainersAndRecipePacks(t *testing.T) {
 	require.Len(t, graph.Resources, 1)
 	require.Equal(t, "frontend", *graph.Resources[0].Name)
 	require.Equal(t, "Applications.Core/containers", *graph.Resources[0].Type)
+}
+
+// TestBuildModeledGraph_ExcludesRadiusCoreApplicationsFromRabbitMQShape
+// locks in the rabbitmq-app regression fix: a template that declares a
+// Radius.Core/applications resource and whose children reference it
+// (application: app.id) must produce exactly the two non-scope nodes
+// (consumer + rabbitmq) with no Radius.Core/applications node.
+//
+// This is the concrete SC-001 fixture from
+// specs/004-graph-dependency-edges/spec.md, using the languageVersion
+// 2.0 symbolic-name codegen shape emitted by `bicep build`.
+func TestBuildModeledGraph_ExcludesRadiusCoreApplicationsFromRabbitMQShape(t *testing.T) {
+	t.Parallel()
+
+	template := map[string]any{
+		"languageVersion": "2.0",
+		"resources": map[string]any{
+			"app": map[string]any{
+				"type": "Radius.Core/applications@2025-08-01-preview",
+				"properties": map[string]any{
+					"name": "rabbitmq-app",
+					"properties": map[string]any{
+						"environment": "[parameters('environment')]",
+					},
+				},
+			},
+			"rabbitmq": map[string]any{
+				"type": "Radius.Messaging/rabbitMQ@2025-08-01-preview",
+				"properties": map[string]any{
+					"name": "rabbitmq",
+					"properties": map[string]any{
+						"application": "[reference('app').id]",
+						"queue":       "jobs",
+					},
+				},
+				"dependsOn": []any{"app"},
+			},
+			"consumer": map[string]any{
+				"type": "Radius.Compute/containers@2025-08-01-preview",
+				"properties": map[string]any{
+					"name": "consumer",
+					"properties": map[string]any{
+						"application": "[reference('app').id]",
+					},
+				},
+				"dependsOn": []any{"app", "rabbitmq"},
+			},
+		},
+	}
+
+	graph, err := BuildModeledGraph(template)
+	require.NoError(t, err)
+	require.Len(t, graph.Resources, 2, "Radius.Core/applications must not appear as a graph node")
+
+	types := map[string]bool{}
+	for _, r := range graph.Resources {
+		require.NotNil(t, r.Type)
+		types[*r.Type] = true
+		require.NotEqual(t, "Radius.Core/applications", *r.Type)
+	}
+	require.True(t, types["Radius.Compute/containers"], "consumer node should survive")
+	require.True(t, types["Radius.Messaging/rabbitMQ"], "rabbitmq node should survive")
 }
 
 func TestBuildModeledGraph_BuildsResourceID(t *testing.T) {

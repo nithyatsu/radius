@@ -36,7 +36,14 @@ const (
 	defaultResourceGroup     = "default"
 	applicationsResourceType = "Applications.Core/applications"
 	environmentsResourceType = "Applications.Core/environments"
-	recipePacksResourceType  = "Radius.Core/recipePacks"
+
+	// Radius.Core control-plane types are containment scopes (see FR-005
+	// in specs/004-graph-dependency-edges/spec.md). They are never graph
+	// nodes and never edge targets. Adding a new excluded type is a
+	// one-line edit here plus one new test case in modeled_test.go.
+	radiusCoreApplicationsType = "Radius.Core/applications"
+	radiusCoreEnvironmentsType = "Radius.Core/environments"
+	recipePacksResourceType    = "Radius.Core/recipePacks"
 )
 
 // resourceIDExpression matches an ARM template resourceId() expression
@@ -252,6 +259,8 @@ func buildModeledResource(entry map[string]any) (*corerpv20250801preview.Applica
 	}
 	if strings.EqualFold(resourceType, applicationsResourceType) ||
 		strings.EqualFold(resourceType, environmentsResourceType) ||
+		strings.EqualFold(resourceType, radiusCoreApplicationsType) ||
+		strings.EqualFold(resourceType, radiusCoreEnvironmentsType) ||
 		strings.EqualFold(resourceType, recipePacksResourceType) {
 		return nil, nil
 	}
