@@ -16,6 +16,8 @@ limitations under the License.
 
 package edges
 
+import "sort"
+
 // Edge kind constants. Values match the ConnectionKind enum on the
 // Radius.Core/2025-08-01-preview wire model; keeping them as untyped
 // strings here avoids importing the generated API package into this
@@ -51,6 +53,15 @@ const (
 // extractor. Callers convert their own representation (ARM JSON entry,
 // stored resource record, etc.) into this shape before calling
 // ExtractEdges.
+//
+// Both Connections and DependsOn hold pre-resolved canonical Radius
+// resource IDs. Callers own the resolution: the static caller parses
+// ARM "[resourceId('T','N')]" expressions before calling the
+// extractor; the runtime caller (Phase 2) receives already-resolved
+// IDs from stored properties and from caller-supplied dependsOnEdges
+// on the GetGraphRequest wire. Keeping the primitive free of ARM /
+// storage / HTTP concerns is what makes it callable from both
+// contexts.
 type Resource struct {
 	// ID is the canonical Radius resource ID
 	// ("/planes/radius/local/resourcegroups/…/providers/{ns}/{type}/{name}").
@@ -59,25 +70,35 @@ type Resource struct {
 	// Type is the Radius resource type ("Radius.Compute/containers").
 	Type string
 
-	// Properties is the resource's authored properties. The extractor
-	// inspects Properties["connections"] for author-declared
-	// connections. Other keys are ignored in Phase 1.
-	Properties map[string]any
+	// Connections is the list of canonical Radius resource IDs this
+	// resource author-declared under properties.connections[*].source.
+	// Each entry produces a Kind=Connection edge (subject to exclusion
+	// and de-duplication). Duplicates are collapsed silently.
+	Connections []string
 
-	// DependsOn is the list of already-resolved canonical Radius
-	// resource IDs the resource declares as build-time dependencies.
-	// The static caller populates this from resolveDependsOn. The
-	// runtime caller (Phase 2) populates it from caller-supplied
-	// dependsOnEdges on the GetGraphRequest wire.
-	//
-	// Entries MUST be canonical resource IDs, not ARM
-	// "[resourceId('T','N')]" expressions and not symbolic names.
+	// DependsOn is the list of canonical Radius resource IDs the
+	// resource declares as build-time dependencies. Each entry not
+	// already covered by Connections produces a Kind=Dependency edge.
+	// The static caller populates this from resolveDependsOn on the
+	// ARM template's dependsOn array. The runtime caller populates it
+	// from caller-supplied dependsOnEdges on the GetGraphRequest wire.
 	DependsOn []string
 }
 
 // Edge is a single directed edge in the application graph.
+//
+// Source and Target describe the fixed orientation of the underlying
+// edge concept ("Source depends on / connects to Target"). Direction
+// selects which side of that edge this entry describes: an Outbound
+// entry lives on Source's Connections slice; an Inbound entry lives on
+// Target's Connections slice.
+//
+// Use Owner and Peer to translate an Edge into a wire-model
+// ApplicationGraphConnection entry without having to check Direction
+// yourself.
 type Edge struct {
-	// Source is the canonical resource ID of the edge's source node.
+	// Source is the canonical resource ID of the edge's source node
+	// (the resource that depends on or connects to Target).
 	Source string
 
 	// Target is the canonical resource ID of the edge's target node.
@@ -92,6 +113,26 @@ type Edge struct {
 	// KindDependency (from DependsOn). Case-sensitive; matches the
 	// wire enum values on Radius.Core/2025-08-01-preview.
 	Kind string
+}
+
+// Owner returns the canonical ID of the resource whose Connections
+// slice owns this Edge entry: Source for an Outbound edge, Target for
+// an Inbound edge.
+func (e Edge) Owner() string {
+	if e.Direction == DirectionInbound {
+		return e.Target
+	}
+	return e.Source
+}
+
+// Peer returns the canonical ID of the other end of the edge — the
+// value stored in the wire entry's `id` field on the owning resource's
+// Connections slice.
+func (e Edge) Peer() string {
+	if e.Direction == DirectionInbound {
+		return e.Source
+	}
+	return e.Target
 }
 
 // ExtractEdges returns the deduplicated, mirrored edge list for the
@@ -116,11 +157,94 @@ type Edge struct {
 // struct. Keeping a single positional argument today (Constitution
 // VII, Simplicity Over Cleverness) avoids paying that cost until a
 // real need materializes.
-//
-// The stub implementation returns nil; the real implementation lands
-// in a follow-up commit (Phase 5 / US1 of the tasks list).
 func ExtractEdges(resources []Resource, excluded map[string]struct{}) []Edge {
-	_ = resources
-	_ = excluded
-	return nil
+	// Build a canonical-ID → Type map for O(1) target validation.
+	// Every candidate target must resolve to a Resource in this map;
+	// unresolved targets and targets whose type is excluded are
+	// silently dropped.
+	byID := make(map[string]string, len(resources))
+	for i := range resources {
+		byID[resources[i].ID] = resources[i].Type
+	}
+
+	validTarget := func(id string) bool {
+		typ, ok := byID[id]
+		if !ok {
+			return false
+		}
+		_, isExcluded := excluded[typ]
+		return !isExcluded
+	}
+
+	// Collect outbound edges keyed by (source, target) → Kind so that
+	// a Connection recorded first is never downgraded to a Dependency
+	// by a same-pair dependsOn entry (Connection-wins, FR-011). Also
+	// collapses multiple dependsOn tokens targeting the same resource
+	// to one edge (FR-012).
+	type pair struct{ src, tgt string }
+	outbound := make(map[pair]string)
+
+	for _, r := range resources {
+		if _, isExcluded := excluded[r.Type]; isExcluded {
+			continue // excluded types are never sources
+		}
+
+		// Connection edges from author-declared Connections.
+		for _, target := range r.Connections {
+			if !validTarget(target) {
+				continue
+			}
+			// Connection wins: overwrite any pre-existing entry (there
+			// shouldn't be one from Connection, but this makes the
+			// invariant explicit).
+			outbound[pair{r.ID, target}] = KindConnection
+		}
+
+		// Dependency edges from DependsOn. Skip if the pair is already
+		// a Connection (Connection-wins). Collapse duplicate tokens.
+		for _, dep := range r.DependsOn {
+			if !validTarget(dep) {
+				continue
+			}
+			k := pair{r.ID, dep}
+			if _, exists := outbound[k]; exists {
+				continue
+			}
+			outbound[k] = KindDependency
+		}
+	}
+
+	// Emit outbound edges + mirrored inbound edges. Mirroring preserves
+	// Kind per FR-010.
+	out := make([]Edge, 0, len(outbound)*2)
+	for p, kind := range outbound {
+		out = append(out, Edge{
+			Source:    p.src,
+			Target:    p.tgt,
+			Direction: DirectionOutbound,
+			Kind:      kind,
+		})
+		out = append(out, Edge{
+			Source:    p.src,
+			Target:    p.tgt,
+			Direction: DirectionInbound,
+			Kind:      kind,
+		})
+	}
+
+	// Deterministic sort so callers can compare or diff the output.
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Source != out[j].Source {
+			return out[i].Source < out[j].Source
+		}
+		if out[i].Target != out[j].Target {
+			return out[i].Target < out[j].Target
+		}
+		if out[i].Direction != out[j].Direction {
+			return out[i].Direction < out[j].Direction
+		}
+		return out[i].Kind < out[j].Kind
+	})
+
+	return out
 }
