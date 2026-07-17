@@ -71,27 +71,17 @@ type Edge struct {
 - No emitted `Edge` has `Source` or `Target` in the exclusion list (FR-002).
 - For any `(Source, Target)` pair on the same source resource, at most one outbound `Edge` is emitted. When both a `Connection` and a `Dependency` would be emitted for the same pair, `Connection` wins (FR-011). The corresponding mirrored inbound entry on `Target` carries the winning `Kind`.
 
-### `ExtractOptions` (input)
-
-```go
-// ExtractOptions configures the edge extractor.
-type ExtractOptions struct {
-    // Excluded is the set of Radius resource types (canonical
-    // "Namespace/type" strings) that MUST NOT appear as graph nodes and
-    // MUST NOT be referenced as edge sources or targets. Callers control
-    // membership so the same primitive can be used with different
-    // exclusion sets (static vs runtime).
-    Excluded map[string]struct{}
-}
-```
-
-The current membership is defined in the static caller — see FR-005 in the spec. Copying the same map into the runtime caller is Phase 2's opt-in.
-
 ### `ExtractEdges` (public function)
 
 ```go
 // ExtractEdges returns the deduplicated, mirrored edge list for the
-// given resources under the given options.
+// given resources, dropping any edge whose source or target type is
+// present in the excluded set.
+//
+// excluded holds canonical "Namespace/type" strings that MUST NOT
+// appear as graph nodes or edge targets. Callers control membership so
+// the same primitive can be used with different exclusion sets (static
+// vs runtime).
 //
 // The output is sorted deterministically by (Source, Target, Direction,
 // Kind) so callers can compare or diff it.
@@ -99,8 +89,16 @@ The current membership is defined in the static caller — see FR-005 in the spe
 // ExtractEdges never returns an error: unresolvable dependsOn entries
 // and edges targeting excluded types are silently dropped (see spec
 // edge cases).
-func ExtractEdges(resources []Resource, opts ExtractOptions) []Edge
+//
+// Future extensibility: if a second configuration knob becomes
+// necessary (for example, an option to emit diagnostic reasons for
+// dropped edges), promote both arguments into an ExtractOptions struct.
+// Keeping a single positional argument today (Constitution VII) avoids
+// paying that cost until a real need materializes.
+func ExtractEdges(resources []Resource, excluded map[string]struct{}) []Edge
 ```
+
+The current exclusion-set membership is defined in the static caller — see FR-005 in the spec. Copying the same map into the runtime caller is Phase 2's opt-in.
 
 ## Wire model — `Radius.Core/2025-08-01-preview`
 
@@ -127,10 +125,6 @@ classDiagram
         +string Target
         +string Direction
         +string Kind
-    }
-
-    class ExtractOptions {
-        +map~string,struct~ Excluded
     }
 
     class ApplicationGraphConnection {

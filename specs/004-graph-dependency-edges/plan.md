@@ -122,10 +122,9 @@ See [research.md](research.md). Summary of resolved unknowns:
 
 Defines the three exported Go entities in `pkg/graph/edges/`:
 
-- `Resource`: `{ ID string; Type string; Properties map[string]any; DependsOn []string }` — pure Go input, no ARM template syntax.
+- `Resource`: `{ ID string; Type string; Properties map[string]any; DependsOn []string }` — pure Go input, no ARM syntax, no HTTP.
 - `Edge`: `{ Source string; Target string; Direction string; Kind string }` — pure Go output.
-- `ExtractOptions`: `{ Excluded map[string]struct{} }` — starter exclusion list built by callers.
-- `ExtractEdges(resources []Resource, opts ExtractOptions) []Edge` — the public entry point.
+- `ExtractEdges(resources []Resource, excluded map[string]struct{}) []Edge` — the public entry point. Plain parameter for the exclusion set today (Constitution VII); promote to a struct if a second knob emerges.
 
 ### Contracts — [contracts/wire-change.md](contracts/wire-change.md)
 

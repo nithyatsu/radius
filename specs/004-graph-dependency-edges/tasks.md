@@ -37,7 +37,7 @@ Single Go module `github.com/radius-project/radius`; feature-specific paths per 
 - [ ] T002 [Foundation] Update `typespec/Radius.Core/applications.tsp`: add `enum ConnectionKind { Connection, Dependency }` and the required `kind: ConnectionKind` field on `ApplicationGraphConnection`. Follow the exact diff in [contracts/wire-change.md](contracts/wire-change.md).
 - [ ] T003 [Foundation] Run `make generate` at repo root. Commit the regenerated `pkg/corerp/api/v20250801preview/zz_generated_models.go`, `swagger/specification/core/resource-manager/Radius.Core/preview/2025-08-01-preview/applications.json`, and any Bicep type extensions produced by the same target.
 - [ ] T004 [P] [Foundation] Create `pkg/graph/edges/doc.go` with the package-level godoc summarizing purpose (edge extraction primitives shared by static and runtime graph builders) and the Phase 2 plug-in point.
-- [ ] T005 [P] [Foundation] Create `pkg/graph/edges/edges.go` with the exported types from [data-model.md](data-model.md#pkggraphedges--go-types): `Resource`, `Edge`, `ExtractOptions`. Include a stub `ExtractEdges(resources []Resource, opts ExtractOptions) []Edge` that returns `nil`. Every exported symbol has godoc.
+- [ ] T005 [P] [Foundation] Create `pkg/graph/edges/edges.go` with the exported types from [data-model.md](data-model.md#pkggraphedges--go-types): `Resource` and `Edge`. Include a stub `ExtractEdges(resources []Resource, excluded map[string]struct{}) []Edge` that returns `nil`. Every exported symbol has godoc; the doc comment on `ExtractEdges` names the promotion path to an options struct if a second knob emerges.
 - [ ] T006 [Foundation] Verify the workspace compiles: `go build ./...`. Verify the new field is visible in the generated Go model: `grep -n 'Kind' pkg/corerp/api/v20250801preview/zz_generated_models.go`.
 
 **Checkpoint**: Wire has `kind`; new package exists; workspace compiles. P1 stories can now proceed in parallel per their dependency map below.
@@ -95,7 +95,7 @@ Single Go module `github.com/radius-project/radius`; feature-specific paths per 
 ### Implementation
 
 - [ ] T014 [US1] Implement `ExtractEdges` in `pkg/graph/edges/edges.go` per [data-model.md](data-model.md):
-  - Iterate `resources`; skip those whose `Type` is in `opts.Excluded`.
+  - Iterate `resources`; skip those whose `Type` is in `excluded`.
   - Collect `Connection` edges from `properties.connections[*].source` (canonical Radius IDs; drop unparseable, drop excluded targets, drop targets not in the resource-ID set).
   - Collect `Dependency` edges from `DependsOn` (drop excluded targets, drop targets not in the resource-ID set).
   - Connection-wins de-dup on `(Source, Target)` per source resource (FR-011); collapse duplicate `Dependency` tokens (FR-012).
@@ -114,7 +114,7 @@ Single Go module `github.com/radius-project/radius`; feature-specific paths per 
 - [ ] T016 [US1] Refactor `pkg/cli/graph/modeled.go`:
   - Build the exclusion set `map[string]struct{}{...}` from the existing constants.
   - After the existing resource-list construction, build `[]edges.Resource` from each entry: `Type` from `entry["type"]`, `Properties` from `entry["properties"]`, `DependsOn` from `resolveDependsOn(entry["dependsOn"])` (canonical IDs, ARM syntax already stripped).
-  - Call `edges.ExtractEdges(resources, edges.ExtractOptions{Excluded: excludedSet})`.
+  - Call `edges.ExtractEdges(resources, excludedSet)`.
   - Convert each returned `edges.Edge` back into `*corerpv20250801preview.ApplicationGraphConnection` on the owning source node's `Connections` slice, setting `Direction`, `ID` (the target), and `Kind` per edge. Attach mirrored inbound entries the same way.
   - Remove the now-obsolete inline connection extraction (`outboundConnections`, `addInboundConnections`) once tests pass. Keep them if lifting them is invasive; the goal is correctness of the emitted graph.
 - [ ] T017 [P] [US1] Extend `pkg/cli/graph/modeled_test.go`:
