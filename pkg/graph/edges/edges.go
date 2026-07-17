@@ -151,6 +151,30 @@ func (e Edge) Peer() string {
 // and edges targeting excluded types are silently dropped. See the
 // spec's edge-cases section for the exhaustive rules.
 //
+// # Callers
+//
+// Two callers consume this primitive today, both by converting their
+// own input into []Resource and interpreting the returned []Edge via
+// Edge.Owner / Edge.Peer when materializing wire entries:
+//
+//   - Static graph builder — [pkg/cli/graph.BuildModeledGraph]. Resolves
+//     ARM "[resourceId('T','N')]" expressions in
+//     properties.connections and dependsOn before calling ExtractEdges.
+//   - Runtime graph handler (Phase 2) —
+//     pkg/corerp/frontend/controller/applications/v20250801preview.
+//     Populates Resource.DependsOn from the caller-supplied
+//     dependsOnEdges field on the GetGraphRequest wire (NOT from a
+//     server-side property scan). Resource.Connections comes from the
+//     resource's stored properties.connections[*].source, which is
+//     already a canonical Radius resource ID at that point. Everything
+//     else — exclusion, Connection-wins de-dup, mirroring — is reused
+//     verbatim.
+//
+// The package intentionally imports nothing from pkg/cli/, pkg/corerp/,
+// or net/http. Verified with `go list -deps ./pkg/graph/edges/...`.
+// Keeping the primitive dependency-free is what makes Phase 2 a wiring
+// change rather than a re-implementation (FR-017..FR-019).
+//
 // Future extensibility: if a second configuration knob becomes
 // necessary (for example, an option to emit diagnostic reasons for
 // dropped edges), promote both arguments into an ExtractOptions
